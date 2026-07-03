@@ -1,0 +1,28 @@
+# ─── Web Framework ────────────────────────────────────────────────────────────
+fastapi==0.110.0
+uvicorn[standard]==0.29.0
+python-multipart==0.0.9        # Required for file uploads
+
+# ─── Database ─────────────────────────────────────────────────────────────────
+sqlalchemy==2.0.29
+alembic==1.13.1
+psycopg2-binary==2.9.9         # PostgreSQL driver
+geoalchemy2==0.14.6            # PostGIS support for SQLAlchemy
+
+# ─── Cache / Task Queue ───────────────────────────────────────────────────────
+redis==5.0.3
+celery==5.3.6
+flower==2.0.1                  # Celery monitoring UI
+
+# ─── Auth ─────────────────────────────────────────────────────────────────────
+python-jose[cryptography]==3.3.0   # JWT tokens
+passlib[bcrypt]==1.7.4             # Password hashing
+
+# ─── Validation ───────────────────────────────────────────────────────────────
+pydantic==2.6.4
+pydantic-settings==2.2.1
+
+# ─── Utilities ────────────────────────────────────────────────────────────────
+python-dotenv==1.0.1
+structlog==24.1.0              # Structured JSON logging
+slowapi==0.1.9                 # Rate limiting for FastAPI

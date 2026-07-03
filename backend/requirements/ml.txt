@@ -1,0 +1,10 @@
+# ─── Machine Learning ─────────────────────────────────────────────────────────
+lifelines==0.27.8              # Cox Proportional Hazards survival analysis
+scikit-learn==1.4.2            # Isolation Forest anomaly detection
+shap==0.45.0                   # SHAP explainability
+numpy==1.26.4
+pandas==2.2.1
+joblib==1.4.0                  # Model serialization (.pkl files)
+
+# ─── Data Generation (dev/demo only) ──────────────────────────────────────────
+faker==24.4.0                  # Synthetic data generation

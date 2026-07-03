@@ -1,0 +1,43 @@
+/* GridMind — Global Styles */
+
+/* CSS Reset + Base */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  height: 100%;
+  background-color: #0a0a0f;  /* Deep dark background */
+  color: #e2e8f0;              /* Light text */
+  font-family: var(--font-inter), system-ui, sans-serif;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* CSS Custom Properties (design tokens) */
+:root {
+  /* Risk tier colors */
+  --color-critical: #ef4444;
+  --color-high:     #f97316;
+  --color-moderate: #eab308;
+  --color-healthy:  #22c55e;
+
+  /* Brand colors */
+  --color-primary:  #6366f1;    /* Indigo */
+  --color-surface:  #1e1e2e;    /* Card background */
+  --color-border:   #2d2d3f;    /* Border */
+
+  /* Spacing */
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+}

@@ -1,0 +1,36 @@
+# pyproject.toml — Project tooling configuration
+# This file configures ruff (linter), pytest (tests), and mypy (type checker)
+# All tools read from here instead of having separate config files
+
+[tool.ruff]
+# Which Python version to target
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+# Rules to enforce:
+#   E/W = pycodestyle (PEP8 style)
+#   F   = pyflakes (unused imports, undefined names)
+#   I   = isort (import ordering)
+#   UP  = pyupgrade (modern Python syntax)
+select = ["E", "W", "F", "I", "UP"]
+ignore = [
+    "E501",  # Line too long — we handle this with line-length above
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["core", "api", "models", "schemas", "services", "tasks"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+# -v = verbose output, show each test name
+# -s = don't capture stdout (useful for debugging)
+addopts = "-v -s"
+
+[tool.mypy]
+python_version = "3.11"
+strict = false         # Start lenient, tighten as project matures
+ignore_missing_imports = true
