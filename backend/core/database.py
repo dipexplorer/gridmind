@@ -52,10 +52,7 @@ SessionLocal = sessionmaker(
     bind=engine,
 )
 
-# ─── Base Class for Models ────────────────────────────────────────────────────
-# All SQLAlchemy ORM models (tables) must inherit from this Base class.
-# It tracks all model definitions and is used by Alembic for migrations.
-Base = declarative_base()
+# Note: Base is defined in models/base.py to avoid circular imports.
 
 
 # ─── Dependency: get_db ───────────────────────────────────────────────────────

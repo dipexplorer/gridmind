@@ -47,6 +47,5 @@ async def root():
 
 
 # ─── TODO: Register API routers here as we build them ─────────────────────────
-# from api import auth, transformers, maintenance, risk, analytics
-# app.include_router(auth.router, prefix="/api/v1")
-# app.include_router(transformers.router, prefix="/api/v1")
+from api.api import api_router
+app.include_router(api_router, prefix="/api/v1")

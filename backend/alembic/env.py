@@ -27,22 +27,19 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from core.config import settings
-from core.database import Base
+from models.base import Base
 
 # ─── Import ALL models here so Alembic can "see" them ─────────────────────────
-# If a model is not imported here, Alembic won't include it in autogenerate.
-# As we create models week by week, add them to this import list.
-# from models.user import User
-# from models.transformer import Transformer
-# from models.score import TransformerScore
-# (Uncomment as we build each model)
+import models
+
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Override the database URL from our settings (instead of alembic.ini)
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# We must replace '%' with '%%' because Alembic uses ConfigParser which interprets '%' for interpolation.
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 # target_metadata tells Alembic what the DB SHOULD look like (our models)
 target_metadata = Base.metadata
@@ -55,6 +52,11 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def include_name(name, type_, parent_names):
+    if type_ == "table":
+        return name not in ["spatial_ref_sys"]
+    return True
+
 def run_migrations_online() -> None:
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
@@ -62,7 +64,11 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            include_name=include_name
+        )
         with context.begin_transaction():
             context.run_migrations()
 

@@ -16,6 +16,7 @@ Pydantic's BaseSettings automatically:
 """
 from pydantic_settings import BaseSettings
 from typing import List
+import urllib.parse
 
 
 class Settings(BaseSettings):
@@ -30,8 +31,9 @@ class Settings(BaseSettings):
     @property
     def DATABASE_URL(self) -> str:
         """Construct the PostgreSQL connection string from individual parts."""
+        encoded_password = urllib.parse.quote_plus(self.POSTGRES_PASSWORD)
         return (
-            f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"postgresql://{self.POSTGRES_USER}:{encoded_password}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
