@@ -1,5 +1,5 @@
-from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional, List
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from typing import Optional, List, Any
 from datetime import date, datetime
 import uuid
 
@@ -19,6 +19,17 @@ class SubstationResponse(SubstationBase):
     created_at: datetime
     updated_at: datetime
     
+    @field_validator('location', mode='before')
+    def parse_location(cls, v: Any):
+        if v is not None:
+            try:
+                from geoalchemy2.shape import to_shape
+                shape = to_shape(v)
+                return f"POINT({shape.x} {shape.y})"
+            except Exception:
+                pass
+        return str(v) if v is not None else None
+
     model_config = ConfigDict(from_attributes=True)
 
 # --- Feeder Schemas ---
@@ -49,7 +60,7 @@ class TransformerBase(BaseModel):
     cooling_type: Optional[str] = Field("ONAN", max_length=16)
     manufacturer: Optional[str] = Field(None, max_length=64)
     
-    location: str # WKT format 'POINT(lon lat)'
+    location: Optional[str] = None # WKT format 'POINT(lon lat)'
     address_text: Optional[str] = None
     district: Optional[str] = Field(None, max_length=64)
     block: Optional[str] = Field(None, max_length=64)
@@ -76,5 +87,17 @@ class TransformerResponse(TransformerBase):
     created_by: Optional[uuid.UUID]
     created_at: datetime
     updated_at: datetime
+    
+    @field_validator('location', mode='before')
+    def parse_location(cls, v: Any):
+        if v is not None:
+            try:
+                from geoalchemy2.shape import to_shape
+                shape = to_shape(v)
+                return f"POINT({shape.x} {shape.y})"
+            except Exception as e:
+                print("GEOMETRY PARSE ERROR:", e, type(v))
+                pass
+        return str(v) if v is not None else None
     
     model_config = ConfigDict(from_attributes=True)

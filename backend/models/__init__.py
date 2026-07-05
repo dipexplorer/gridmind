@@ -3,7 +3,7 @@ from .user import User
 from .asset import Substation, Feeder, Transformer
 from .event import MaintenanceLog, FailureEvent
 from .timeseries import Complaint, LoadReading
-from .intelligence import ScoreRunMetadata, TransformerScore, ShapExplanation, ModelRegistry
+from .intelligence import ScoreRunMetadata, TransformerScore, ShapExplanation
 from .notification import Notification, AuditLog
 
 __all__ = [

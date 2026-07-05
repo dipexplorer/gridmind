@@ -15,14 +15,14 @@ from tasks.scoring import score_all_transformers
 router = APIRouter()
 
 @router.post("/ai-runs/trigger")
-def trigger_ai_run():
+def trigger_ai_run(background_tasks: BackgroundTasks):
     """
-    Trigger a new AI background run via Celery.
-    Returns the task_id immediately.
+    Trigger a new AI background run.
+    Uses FastAPI BackgroundTasks for simple local execution.
     """
     task_id = str(uuid.uuid4())
-    # Send task to Celery Queue
-    score_all_transformers.apply_async(kwargs={"task_id": task_id}, task_id=task_id)
+    # Send task to FastAPI Background queue
+    background_tasks.add_task(score_all_transformers, task_id)
     
     return {"message": "AI analysis started in background", "task_id": task_id}
 

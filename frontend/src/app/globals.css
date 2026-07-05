@@ -2,10 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-slate-50 text-slate-900 antialiased h-screen overflow-hidden;
+@layer base {
+  :root {
+    --background: #F8FAFC;
+    --foreground: #1E293B;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 }
 
-html {
-  @apply h-screen overflow-hidden;
+@layer utilities {
+  .bento-card {
+    @apply bg-white rounded-2xl border border-border shadow-bento hover:shadow-bento-hover transition-bento duration-300 overflow-hidden flex flex-col;
+  }
+  
+  /* Mapbox custom overrides to fit Bento style */
+  .mapboxgl-popup-content {
+    @apply rounded-xl shadow-lg border border-border p-3 !important;
+  }
+  
+  .mapboxgl-popup-close-button {
+    @apply text-slate-400 hover:text-slate-700 right-2 top-2 !important;
+  }
+  
+  /* Leaflet custom overrides */
+  .leaflet-div-icon {
+    background: transparent !important;
+    border: none !important;
+  }
+  
+  .leaflet-popup-content-wrapper {
+    @apply rounded-xl border border-slate-100 shadow-xl p-0 overflow-hidden !important;
+  }
+  
+  .leaflet-popup-tip {
+    @apply shadow-xl border-slate-100 !important;
+  }
+
+  .leaflet-popup-content {
+    margin: 12px !important;
+  }
 }

@@ -4,28 +4,22 @@ from datetime import datetime
 import uuid
 
 class ScoreRunMetadataBase(BaseModel):
-    run_type: str = Field(..., max_length=32)
+    status: str = Field(..., max_length=32)
+    anomalies_detected: int = 0
     started_at: datetime
     completed_at: Optional[datetime] = None
-    status: str = Field(..., max_length=32)
-    transformers_scored: int = 0
-    anomalies_detected: int = 0
-    execution_time_sec: Optional[float] = None
-    model_version: Optional[str] = Field(None, max_length=64)
-    error_log: Optional[str] = None
     
-    model_config = ConfigDict(protected_namespaces=())
-
 class ScoreRunMetadataResponse(ScoreRunMetadataBase):
     id: uuid.UUID
     
     model_config = ConfigDict(from_attributes=True)
 
 class TransformerScoreBase(BaseModel):
-    health_score: float
+    anomaly_score: Optional[float] = None
     risk_category: str = Field(..., max_length=16)
-    anomaly_flag: bool = False
-    confidence_score: Optional[float] = None
+    expected_lifetime_days: Optional[int] = None
+    confidence_interval_lower: Optional[int] = None
+    confidence_interval_upper: Optional[int] = None
 
 class TransformerScoreResponse(TransformerScoreBase):
     id: uuid.UUID
