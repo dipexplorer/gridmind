@@ -39,6 +39,9 @@ celery_app.conf.update(
     task_serializer="json",
     result_serializer="json",
     accept_content=["json"],
+    
+    # Run tasks synchronously (Eager mode) to bypass Redis requirement for testing
+    task_always_eager=True,
 
     # Reliability — only acknowledge a task as "done" after successful completion
     # (If a worker crashes mid-task, the task is re-queued)

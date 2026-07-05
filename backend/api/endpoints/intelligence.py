@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
 import uuid
@@ -10,8 +10,21 @@ from schemas.intelligence import (
     ShapExplanationResponse
 )
 from crud import crud_intelligence
+from tasks.scoring import score_all_transformers
 
 router = APIRouter()
+
+@router.post("/ai-runs/trigger")
+def trigger_ai_run():
+    """
+    Trigger a new AI background run via Celery.
+    Returns the task_id immediately.
+    """
+    task_id = str(uuid.uuid4())
+    # Send task to Celery Queue
+    score_all_transformers.apply_async(kwargs={"task_id": task_id}, task_id=task_id)
+    
+    return {"message": "AI analysis started in background", "task_id": task_id}
 
 @router.get("/ai-runs/latest", response_model=ScoreRunMetadataResponse)
 def get_latest_ai_run(db: Session = Depends(get_db)):

@@ -13,6 +13,8 @@ class ScoreRunMetadataBase(BaseModel):
     execution_time_sec: Optional[float] = None
     model_version: Optional[str] = Field(None, max_length=64)
     error_log: Optional[str] = None
+    
+    model_config = ConfigDict(protected_namespaces=())
 
 class ScoreRunMetadataResponse(ScoreRunMetadataBase):
     id: uuid.UUID
