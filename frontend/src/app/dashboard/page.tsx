@@ -5,6 +5,7 @@ import { BentoCard } from '@/components/widgets/BentoCard';
 import { AIRiskWidget } from '@/components/widgets/AIRiskWidget';
 import { TransformerListWidget } from '@/components/widgets/TransformerListWidget';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { Activity, Zap, ShieldAlert, Cpu, Database, BarChart3, ArrowRight, Server } from 'lucide-react';
 
 // Dynamically import Leaflet Map to avoid SSR issues
@@ -48,7 +49,7 @@ export default function Dashboard() {
       }
 
       // 2. Fetch all transformers
-      const trRes = await fetch("http://localhost:8000/api/v1/transformers/");
+      const trRes = await fetch("http://localhost:8000/api/v1/transformers/", { cache: 'no-store' });
       const transformers: Transformer[] = await trRes.json();
 
       // 3. Fetch scores for each transformer (in parallel)
@@ -58,7 +59,7 @@ export default function Dashboard() {
             const scoreRes = await fetch(`http://localhost:8000/api/v1/transformers/${t.id}/risk-score`);
             if (scoreRes.ok) {
               const scoreData: RiskScore = await scoreRes.json();
-              return { ...t, ...scoreData };
+              return { ...t, ...scoreData, id: t.id };
             }
           } catch (e) {
             console.error(`Failed to fetch score for ${t.id}`);
@@ -244,9 +245,9 @@ export default function Dashboard() {
                     </td>
                     <td className="py-3 font-bold text-slate-700">{tx.anomaly_score?.toFixed(1) || '0.0'}%</td>
                     <td className="py-3 text-right">
-                      <button className="text-primary hover:text-blue-700 font-medium text-xs flex items-center gap-1 ml-auto">
+                      <Link href={`/dashboard/transformers/${tx.id}`} className="text-primary hover:text-blue-700 font-medium text-xs flex items-center gap-1 ml-auto w-fit">
                         Details <ArrowRight size={12} />
-                      </button>
+                      </Link>
                     </td>
                   </tr>
                 ))}

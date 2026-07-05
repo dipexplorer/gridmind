@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { AlertTriangle, MapPin, Activity } from 'lucide-react';
+import Link from 'next/link';
 
 interface Transformer {
   id: string;
@@ -13,10 +14,9 @@ interface Transformer {
 
 interface TransformerListWidgetProps {
   transformers: Transformer[];
-  onSelect?: (id: string) => void;
 }
 
-export function TransformerListWidget({ transformers, onSelect }: TransformerListWidgetProps) {
+export function TransformerListWidget({ transformers }: TransformerListWidgetProps) {
   // Only show high and critical risk
   const riskyTransformers = transformers.filter(t => 
     ['HIGH', 'CRITICAL'].includes(t.risk_category)
@@ -37,9 +37,9 @@ export function TransformerListWidget({ transformers, onSelect }: TransformerLis
       ) : (
         <div className="space-y-3">
           {riskyTransformers.map((t) => (
-            <div 
+            <Link 
               key={t.id} 
-              onClick={() => onSelect && onSelect(t.id)}
+              href={`/dashboard/transformers/${t.id}`}
               className="flex items-start p-3 rounded-xl border border-border hover:bg-slate-50 hover:border-slate-300 transition-colors cursor-pointer group"
             >
               <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${t.risk_category === 'CRITICAL' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}>
@@ -66,7 +66,7 @@ export function TransformerListWidget({ transformers, onSelect }: TransformerLis
                   )}
                 </div>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       )}

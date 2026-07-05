@@ -11,7 +11,9 @@ from sqlalchemy.orm import Session
 from core.database import SessionLocal, engine
 from models.base import Base
 from models.asset import Substation, Feeder, Transformer
-from models.intelligence import TransformerScore
+from models.intelligence import TransformerScore, ShapExplanation
+from models.timeseries import Complaint, LoadReading
+from models.event import MaintenanceLog, FailureEvent
 from geoalchemy2.elements import WKTElement
 
 def create_tables():
@@ -21,7 +23,12 @@ def create_tables():
 
 def clear_data(db: Session):
     print("Clearing old data...")
+    db.query(ShapExplanation).delete()
     db.query(TransformerScore).delete()
+    db.query(LoadReading).delete()
+    db.query(MaintenanceLog).delete()
+    db.query(FailureEvent).delete()
+    db.query(Complaint).delete()
     db.query(Transformer).delete()
     db.query(Feeder).delete()
     db.query(Substation).delete()
@@ -126,7 +133,57 @@ def seed_data():
         db.commit()
         for t in db_transformers: db.refresh(t)
 
-        print(f"Successfully inserted {len(db_substations)} Substations, {len(db_feeders)} Feeders, and {len(db_transformers)} Transformers!")
+        # 4. Generate 24 Load Readings for each Transformer (SCADA simulation)
+        print("Generating historical load readings (SCADA)...")
+        readings = []
+        for t in db_transformers:
+            base_temp = random.uniform(45.0, 65.0)
+            base_load = random.uniform(40.0, 75.0)
+            for h in range(24):
+                time_point = datetime.now(timezone.utc if hasattr(datetime, 'now') else None) - timedelta(hours=24-h)
+                temp = base_temp + random.uniform(-5.0, 10.0) + (5.0 if 12 <= h <= 16 else 0.0) # Hotter during afternoon
+                load_pct = base_load + random.uniform(-10.0, 15.0) + (15.0 if 18 <= h <= 22 else 0.0) # Peak load evening
+                
+                readings.append(LoadReading(
+                    time=time_point,
+                    transformer_id=t.id,
+                    load_kw=float(load_pct * float(t.rated_kva) / 100.0),
+                    load_kvar=float(load_pct * float(t.rated_kva) * 0.1 / 100.0),
+                    load_percentage=float(load_pct),
+                    voltage_lv=float(random.uniform(400.0, 420.0)),
+                    current_a=float(load_pct * 3.5),
+                    temperature_c=float(temp),
+                    source='SCADA'
+                ))
+        db.bulk_save_objects(readings)
+        db.commit()
+
+        # 5. Generate historical Maintenance Logs
+        print("Generating historical maintenance logs...")
+        logs = []
+        for i, t in enumerate(db_transformers):
+            # Seed maintenance log for 40% of transformers
+            if random.random() < 0.4:
+                m_date = date.today() - timedelta(days=random.randint(15, 120))
+                m_type = random.choice(["OIL_FILTERATION", "BUSHING_REPLACEMENT", "TAP_CHANGER_OVERHAUL", "GENERAL_INSPECTION"])
+                
+                logs.append(MaintenanceLog(
+                    transformer_id=t.id,
+                    maintenance_date=m_date,
+                    maintenance_type=m_type,
+                    components_replaced=["Oil Filter", "Gasket"] if m_type == "OIL_FILTERATION" else ["Bushing Sleeves"] if m_type == "BUSHING_REPLACEMENT" else [],
+                    work_description=f"Standard {m_type.lower().replace('_', ' ')} performed during routine inspection.",
+                    findings=random.choice(["Insulation levels normal.", "Slight winding discoloration.", "Oil BDV value stable."]),
+                    oil_bdv_kv=float(random.uniform(30.0, 60.0)),
+                    winding_resistance=float(random.uniform(0.12, 0.45)),
+                    insulation_megohm=float(random.uniform(150.0, 600.0)),
+                    outcome="COMPLETED",
+                    next_maintenance_due=m_date + timedelta(days=180)
+                ))
+        db.bulk_save_objects(logs)
+        db.commit()
+
+        print(f"Successfully inserted {len(db_substations)} Substations, {len(db_feeders)} Feeders, {len(db_transformers)} Transformers, {len(readings)} Load Readings, and {len(logs)} Maintenance Logs!")
 
     except Exception as e:
         db.rollback()
@@ -135,5 +192,6 @@ def seed_data():
         db.close()
 
 if __name__ == "__main__":
+    from datetime import timezone
     create_tables()
     seed_data()
