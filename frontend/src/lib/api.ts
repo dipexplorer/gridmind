@@ -9,12 +9,31 @@ export const apiClient = axios.create({
   },
 });
 
-// Interceptor for attaching auth tokens (will be implemented fully in auth phase)
-apiClient.interceptors.request.use((config) => {
-  // const token = localStorage.getItem('token');
-  // if (token) config.headers.Authorization = `Bearer ${token}`;
+import { supabase } from './supabaseClient';
+
+// Interceptor for attaching auth tokens
+apiClient.interceptors.request.use(async (config) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    config.headers.Authorization = `Bearer ${session.access_token}`;
+  }
   return config;
 });
+
+// Interceptor for handling 401 Unauthorized responses globally
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401) {
+      console.warn("Unauthorized request, signing out...");
+      await supabase.auth.signOut();
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Transformers API Functions
 export const getTransformers = async () => {

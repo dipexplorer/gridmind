@@ -7,6 +7,7 @@ import { TransformerListWidget } from '@/components/widgets/TransformerListWidge
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { Activity, Zap, ShieldAlert, Cpu, Database, BarChart3, ArrowRight, Server } from 'lucide-react';
+import { apiClient } from '@/lib/api';
 
 // Dynamically import Leaflet Map to avoid SSR issues
 const TransformerMap = dynamic(() => import('@/components/map/TransformerMap'), { ssr: false });
@@ -58,33 +59,33 @@ export default function Dashboard() {
   async function loadDashboardData() {
     try {
       // 1. Check AI Run status
-      const runRes = await fetch("http://localhost:8000/api/v1/ai-runs/latest");
-      if (runRes.ok) {
-        const runData = await runRes.json();
-        setAiRunStatus(`Last updated: ${new Date(runData.started_at).toLocaleTimeString()}`);
-      } else {
+      try {
+        const runRes = await apiClient.get("/ai-runs/latest");
+        setAiRunStatus(`Last updated: ${new Date(runRes.data.started_at).toLocaleTimeString()}`);
+      } catch {
         setAiRunStatus("No scans run yet");
       }
 
       // Fetch Substations
-      const subRes = await fetch("http://localhost:8000/api/v1/substations/", { cache: 'no-store' });
-      const substations: Substation[] = subRes.ok ? await subRes.json() : [];
-      const subMap = new Map(substations.map(s => [s.id, s.name]));
+      let subMap = new Map();
+      try {
+        const subRes = await apiClient.get("/substations/");
+        subMap = new Map(subRes.data.map((s: Substation) => [s.id, s.name]));
+      } catch (e) {
+        console.error("Failed to fetch substations", e);
+      }
 
       // 2. Fetch all transformers
-      const trRes = await fetch("http://localhost:8000/api/v1/transformers/", { cache: 'no-store' });
-      const transformers: Transformer[] = await trRes.json();
+      const trRes = await apiClient.get("/transformers/");
+      const transformers: Transformer[] = trRes.data;
 
       // 3. Fetch scores for each transformer (in parallel)
       const combined: CombinedData[] = await Promise.all(
         transformers.map(async (t) => {
           const substation_name = t.substation_id ? subMap.get(t.substation_id) : "Unknown Substation";
           try {
-            const scoreRes = await fetch(`http://localhost:8000/api/v1/transformers/${t.id}/risk-score`, { cache: 'no-store' });
-            if (scoreRes.ok) {
-              const scoreData: RiskScore = await scoreRes.json();
-              return { ...t, ...scoreData, id: t.id, substation_name };
-            }
+            const scoreRes = await apiClient.get(`/transformers/${t.id}/risk-score`);
+            return { ...t, ...scoreRes.data, id: t.id, substation_name };
           } catch (e) {
             console.error(`Failed to fetch score for ${t.id}`);
           }
@@ -111,7 +112,7 @@ export default function Dashboard() {
   const triggerAIScan = async () => {
     setScanning(true);
     try {
-      await fetch("http://localhost:8000/api/v1/ai-runs/trigger", { method: 'POST' });
+      await apiClient.post("/ai-runs/trigger");
       // Wait for background tasks to process
       setTimeout(async () => {
         await loadDashboardData();

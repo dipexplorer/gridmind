@@ -28,7 +28,7 @@ class RealAIModel:
     """
     
     def __init__(self):
-        self.features = ["load_percentage", "voltage_lv", "current_a", "temperature_c"]
+        self.features = ["temperature_c", "load_percentage", "voltage_lv", "current_a"]
         self.model = None
         self.survival_model = None
         self.explainer = None
@@ -92,7 +92,7 @@ class RealAIModel:
                 temp_c = float(reading.temperature_c) if reading.temperature_c is not None else 0.0
 
             # 2. Structure feature vector
-            x = np.array([[load_pct, v_lv, curr_a, temp_c]])
+            x = np.array([[temp_c, load_pct, v_lv, curr_a]])
             df_x = pd.DataFrame(x, columns=self.features)
 
             # 3. Predict Anomaly Score (Isolation Forest decision_function)
@@ -101,16 +101,18 @@ class RealAIModel:
             raw_score = self.model.decision_function(df_x)[0]
             
             # Map raw score to 0-100 percentage (where 100 is highly anomalous)
-            anomaly_score = 100 * (0.5 - raw_score)
+            # Normal data usually has raw_score > 0 (e.g. 0.1 to 0.3)
+            # Anomalies have raw_score < 0
+            anomaly_score = 35 - (raw_score * 200)
             # Clip between 0 and 100 to prevent database overflow
             anomaly_score = max(0.0, min(100.0, float(anomaly_score)))
 
             # Categorize Risk
-            if anomaly_score > 75:
+            if anomaly_score >= 75:
                 category = "CRITICAL"
-            elif anomaly_score > 55:
+            elif anomaly_score >= 55:
                 category = "HIGH"
-            elif anomaly_score > 35:
+            elif anomaly_score >= 35:
                 category = "MEDIUM"
             else:
                 category = "LOW"
@@ -122,7 +124,7 @@ class RealAIModel:
             # Pack SHAP values to fit schemas.intelligence.ShapExplanationResponse
             shap_list = []
             for i, name in enumerate(self.features):
-                val_mapping = [load_pct, v_lv, curr_a, temp_c]
+                val_mapping = [temp_c, load_pct, v_lv, curr_a]
                 shap_list.append({
                     "feature_name": name,
                     "feature_value": round(val_mapping[i], 2),

@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    SUPABASE_JWT_SECRET: str = ""
 
     # ─── API ──────────────────────────────────────────────────────────────────
     API_DEBUG: bool = False
