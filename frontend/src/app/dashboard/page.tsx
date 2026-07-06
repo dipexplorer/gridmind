@@ -11,7 +11,6 @@ import { Activity, Zap, ShieldAlert, Cpu, Database, BarChart3, ArrowRight, Serve
 // Dynamically import Leaflet Map to avoid SSR issues
 const TransformerMap = dynamic(() => import('@/components/map/TransformerMap'), { ssr: false });
 
-// Type Definitions
 interface Transformer {
   id: string;
   name: string;
@@ -20,6 +19,9 @@ interface Transformer {
   location_name: string;
   operational_status: string;
   location: string;
+  substation_id?: string;
+  address_text?: string;
+  district?: string;
 }
 
 interface RiskScore {
@@ -29,13 +31,29 @@ interface RiskScore {
   expected_lifetime_days: number;
 }
 
-interface CombinedData extends Transformer, Partial<RiskScore> {}
+interface Substation {
+  id: string;
+  name: string;
+  code: string;
+}
+
+interface CombinedData extends Transformer, Partial<RiskScore> {
+  substation_name?: string;
+}
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<CombinedData[]>([]);
   const [aiRunStatus, setAiRunStatus] = useState<string>("Loading...");
   const [scanning, setScanning] = useState(false);
+
+  // Filter States
+  const [search, setSearch] = useState("");
+  const [selectedSubstation, setSelectedSubstation] = useState("all");
+  const [selectedRisk, setSelectedRisk] = useState("all");
+  const [selectedCapacity, setSelectedCapacity] = useState("all");
+  const [selectedStatus, setSelectedStatus] = useState("all");
+  const [substationsList, setSubstationsList] = useState<string[]>([]);
 
   async function loadDashboardData() {
     try {
@@ -48,6 +66,11 @@ export default function Dashboard() {
         setAiRunStatus("No scans run yet");
       }
 
+      // Fetch Substations
+      const subRes = await fetch("http://localhost:8000/api/v1/substations/", { cache: 'no-store' });
+      const substations: Substation[] = subRes.ok ? await subRes.json() : [];
+      const subMap = new Map(substations.map(s => [s.id, s.name]));
+
       // 2. Fetch all transformers
       const trRes = await fetch("http://localhost:8000/api/v1/transformers/", { cache: 'no-store' });
       const transformers: Transformer[] = await trRes.json();
@@ -55,21 +78,25 @@ export default function Dashboard() {
       // 3. Fetch scores for each transformer (in parallel)
       const combined: CombinedData[] = await Promise.all(
         transformers.map(async (t) => {
+          const substation_name = t.substation_id ? subMap.get(t.substation_id) : "Unknown Substation";
           try {
-            const scoreRes = await fetch(`http://localhost:8000/api/v1/transformers/${t.id}/risk-score`);
+            const scoreRes = await fetch(`http://localhost:8000/api/v1/transformers/${t.id}/risk-score`, { cache: 'no-store' });
             if (scoreRes.ok) {
               const scoreData: RiskScore = await scoreRes.json();
-              return { ...t, ...scoreData, id: t.id };
+              return { ...t, ...scoreData, id: t.id, substation_name };
             }
           } catch (e) {
             console.error(`Failed to fetch score for ${t.id}`);
           }
           // Fallback if no score
-          return { ...t, anomaly_score: 0, risk_category: "UNKNOWN", expected_lifetime_days: 0 };
+          return { ...t, anomaly_score: 0, risk_category: "UNKNOWN", expected_lifetime_days: 0, substation_name };
         })
       );
       
       setData(combined);
+      
+      const uniqueSubs = Array.from(new Set(combined.map(c => c.substation_name).filter(Boolean))) as string[];
+      setSubstationsList(uniqueSubs);
     } catch (err) {
       console.error("Dashboard data load failed", err);
     } finally {
@@ -96,11 +123,36 @@ export default function Dashboard() {
     }
   };
 
-  // Compute stats
-  const healthyCount = data.filter(d => d.risk_category === "LOW").length;
-  const mediumCount = data.filter(d => d.risk_category === "MEDIUM").length;
-  const highCount = data.filter(d => d.risk_category === "HIGH").length;
-  const criticalCount = data.filter(d => d.risk_category === "CRITICAL").length;
+  // Compute filteredData reactively
+  const filteredData = data.filter((item) => {
+    const codeMatch = item.transformer_code?.toLowerCase().includes(search.toLowerCase());
+    const nameMatch = item.name?.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = !search || codeMatch || nameMatch;
+
+    const matchesSubstation = selectedSubstation === "all" || item.substation_name === selectedSubstation;
+    const matchesRisk = selectedRisk === "all" || item.risk_category === selectedRisk;
+
+    let matchesCapacity = true;
+    if (selectedCapacity !== "all") {
+      if (selectedCapacity === "under_100") {
+        matchesCapacity = item.rated_kva < 100;
+      } else if (selectedCapacity === "100_250") {
+        matchesCapacity = item.rated_kva >= 100 && item.rated_kva <= 250;
+      } else if (selectedCapacity === "over_250") {
+        matchesCapacity = item.rated_kva > 250;
+      }
+    }
+
+    const matchesStatus = selectedStatus === "all" || item.operational_status === selectedStatus;
+
+    return matchesSearch && matchesSubstation && matchesRisk && matchesCapacity && matchesStatus;
+  });
+
+  // Compute stats based on filteredData
+  const healthyCount = filteredData.filter(d => d.risk_category === "LOW").length;
+  const mediumCount = filteredData.filter(d => d.risk_category === "MEDIUM").length;
+  const highCount = filteredData.filter(d => d.risk_category === "HIGH").length;
+  const criticalCount = filteredData.filter(d => d.risk_category === "CRITICAL").length;
   
   const riskChartData = [
     { category: 'Healthy', count: healthyCount, color: '#10B981' },
@@ -144,6 +196,82 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Filters Bar */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* Search Input */}
+        <div>
+          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5">Search Asset</label>
+          <input 
+            type="text"
+            placeholder="e.g. TRF_GHY_001..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-100 hover:border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:border-primary focus:bg-white transition-all"
+          />
+        </div>
+
+        {/* Substation Dropdown */}
+        <div>
+          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5">Substation</label>
+          <select
+            value={selectedSubstation}
+            onChange={(e) => setSelectedSubstation(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-100 hover:border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-700 focus:outline-none focus:border-primary focus:bg-white transition-all"
+          >
+            <option value="all">All Substations</option>
+            {substationsList.map((sub, i) => (
+              <option key={i} value={sub}>{sub}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Risk Level Dropdown */}
+        <div>
+          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5">Risk Level</label>
+          <select
+            value={selectedRisk}
+            onChange={(e) => setSelectedRisk(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-100 hover:border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-700 focus:outline-none focus:border-primary focus:bg-white transition-all"
+          >
+            <option value="all">All Risk Levels</option>
+            <option value="LOW">LOW / HEALTHY</option>
+            <option value="MEDIUM">MEDIUM</option>
+            <option value="HIGH">HIGH</option>
+            <option value="CRITICAL">CRITICAL</option>
+            <option value="UNKNOWN">UNKNOWN</option>
+          </select>
+        </div>
+
+        {/* Capacity Dropdown */}
+        <div>
+          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5">Capacity</label>
+          <select
+            value={selectedCapacity}
+            onChange={(e) => setSelectedCapacity(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-100 hover:border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-700 focus:outline-none focus:border-primary focus:bg-white transition-all"
+          >
+            <option value="all">All Capacities</option>
+            <option value="under_100">&lt; 100 kVA</option>
+            <option value="100_250">100 - 250 kVA</option>
+            <option value="over_250">&gt; 250 kVA</option>
+          </select>
+        </div>
+
+        {/* Status Dropdown */}
+        <div>
+          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5">Operational Status</label>
+          <select
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-100 hover:border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-700 focus:outline-none focus:border-primary focus:bg-white transition-all"
+          >
+            <option value="all">All Statuses</option>
+            <option value="IN_SERVICE">IN_SERVICE</option>
+            <option value="OUT_OF_SERVICE">OUT_OF_SERVICE</option>
+          </select>
+        </div>
+      </div>
+
       {/* Bento Grid Layout */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 auto-rows-[160px]">
         
@@ -155,7 +283,7 @@ export default function Dashboard() {
           </div>
           <div>
             <div className="text-4xl font-extrabold text-slate-900">
-              {data.length > 0 ? Math.round((healthyCount / data.length) * 100) : 0}%
+              {filteredData.length > 0 ? Math.round((healthyCount / filteredData.length) * 100) : 0}%
             </div>
             <p className="text-xs text-emerald-600 font-semibold mt-1 flex items-center gap-1">
               <span>●</span> Optimal State
@@ -184,7 +312,7 @@ export default function Dashboard() {
             <div className="p-2 bg-blue-50 text-blue-600 rounded-xl"><Database size={20} /></div>
           </div>
           <div>
-            <div className="text-4xl font-extrabold text-slate-900">{data.length}</div>
+            <div className="text-4xl font-extrabold text-slate-900">{filteredData.length}</div>
             <p className="text-xs text-slate-500 font-semibold mt-1">Guwahati Region</p>
           </div>
         </BentoCard>
@@ -204,7 +332,7 @@ export default function Dashboard() {
         {/* Map Widget (Span 3 columns, span 2 rows) */}
         <BentoCard className="md:col-span-2 lg:col-span-3 row-span-2 p-0 overflow-hidden relative border border-slate-100 rounded-2xl shadow-sm h-full min-h-[320px]">
           <div className="absolute inset-0 bg-slate-100 flex items-center justify-center z-0">
-            <TransformerMap transformers={data} onMarkerClick={() => {}} />
+            <TransformerMap transformers={filteredData} onMarkerClick={() => {}} />
           </div>
         </BentoCard>
 
@@ -229,7 +357,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
-                {data.slice(0, 10).map((tx) => (
+                {filteredData.slice(0, 10).map((tx) => (
                   <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-3 font-semibold text-slate-800">{tx.transformer_code}</td>
                     <td className="py-3 text-slate-500">{tx.rated_kva} kVA</td>
@@ -259,7 +387,7 @@ export default function Dashboard() {
         {/* Critical Attention List (Span 1 column, span 2 rows) */}
         <BentoCard className="row-span-2 p-5" title="Critical Attention">
           <div className="mt-4 flex-1 h-[240px]">
-            <TransformerListWidget transformers={data as any} />
+            <TransformerListWidget transformers={filteredData as any} />
           </div>
         </BentoCard>
 

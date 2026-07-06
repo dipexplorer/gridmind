@@ -51,4 +51,15 @@
   .leaflet-popup-content {
     margin: 12px !important;
   }
+
+  .leaflet-tooltip {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  .leaflet-tooltip-top:before {
+    border-top-color: rgba(15, 23, 42, 0.9) !important; /* matches dark slate bg */
+  }
 }
