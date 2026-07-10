@@ -40,6 +40,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           <a href="/assets" className={`text-sm font-semibold transition-colors ${pathname === '/assets' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-900'}`}>
             Assets Directory
           </a>
+          <a href="/dashboard/tickets" className={`text-sm font-semibold transition-colors ${pathname === '/dashboard/tickets' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-900'}`}>
+            Tickets
+          </a>
           <a href="/dashboard/settings" className={`text-sm font-semibold transition-colors ${pathname === '/dashboard/settings' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-900'}`}>
             Settings
           </a>
