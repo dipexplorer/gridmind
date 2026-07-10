@@ -7,7 +7,7 @@ import { TransformerListWidget } from '@/components/widgets/TransformerListWidge
 import { TicketsWidget, Ticket } from '@/components/widgets/TicketsWidget';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { Activity, Zap, ShieldAlert, Cpu, Database, BarChart3, ArrowRight, Server } from 'lucide-react';
+import { Activity, Zap, ShieldAlert, Cpu, Database, BarChart3, ArrowRight, Server, Download } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 
 // Dynamically import Leaflet Map to avoid SSR issues
@@ -177,6 +177,29 @@ export default function Dashboard() {
     { category: 'High', count: highCount, color: '#F59E0B' },
     { category: 'Critical', count: criticalCount, color: '#EF4444' }
   ];
+
+  const exportTicketsToCSV = () => {
+    if (tickets.length === 0) return;
+    const headers = ["Ticket ID", "Transformer", "Status", "Priority", "Description", "Created At"];
+    const rows = tickets.map(t => [
+      t.id,
+      t.transformer_name || t.transformer_id,
+      t.status,
+      t.priority,
+      `"${t.description.replace(/"/g, '""')}"`,
+      new Date(t.created_at).toLocaleString()
+    ]);
+    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `gridmind_tickets_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   if (loading) {
     return (
@@ -409,7 +432,19 @@ export default function Dashboard() {
         </BentoCard>
 
         {/* Tickets Widget (Span 4 columns, span 2 rows) */}
-        <BentoCard className="md:col-span-2 lg:col-span-4 row-span-2 p-5" title="Active Maintenance Tickets">
+        <BentoCard 
+          className="md:col-span-2 lg:col-span-4 row-span-2 p-5" 
+          title="Active Maintenance Tickets"
+          action={
+            <button 
+              onClick={exportTicketsToCSV} 
+              disabled={tickets.length === 0}
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <Download size={14} /> Export CSV
+            </button>
+          }
+        >
           <div className="mt-4 flex-1 h-[240px]">
             <TicketsWidget tickets={tickets} onTicketResolved={loadDashboardData} />
           </div>

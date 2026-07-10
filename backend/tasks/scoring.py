@@ -65,6 +65,23 @@ def score_all_transformers(task_id: str = None):
                     description=f"Auto-generated ticket due to {prediction['risk_category']} anomaly score: {prediction['anomaly_score']}"
                 )
                 db.add(ticket)
+                db.flush()
+
+                # Broadcast new alert via WebSockets
+                from services.websocket import manager
+                try:
+                    manager.broadcast_sync({
+                        "type": "NEW_ALERT",
+                        "alert": {
+                            "id": str(alert.id),
+                            "transformer_id": str(t.id),
+                            "severity": alert.severity,
+                            "message": alert.message,
+                            "created_at": alert.created_at.isoformat() if alert.created_at else None
+                        }
+                    })
+                except Exception as ws_err:
+                    logger.error(f"Failed to broadcast websocket message: {ws_err}")
                 
         db.commit()
         # Mark run as completed

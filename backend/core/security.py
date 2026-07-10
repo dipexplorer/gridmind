@@ -37,35 +37,40 @@ def get_supabase_jwks():
 
 security = HTTPBearer()
 
-def verify_supabase_token(credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)]):
+def validate_token_string(token: str):
     """
-    Verifies that the provided JWT token was issued by Supabase.
-    Validates a Supabase JWT. It supports both symmetric (HS256) and asymmetric (ES256/RS256) tokens.
+    Validates a JWT token string directly. Useful for WebSockets.
     """
-    token = credentials.credentials
-    
     try:
         unverified_header = jwt.get_unverified_header(token)
         token_alg = unverified_header.get("alg", "HS256")
         
         if token_alg != "HS256":
-            # Asymmetric token: Use JWKS
             key = get_supabase_jwks()
             if not key:
                 raise ValueError("JWKS could not be loaded to verify asymmetric token")
         else:
-            # Symmetric token: Use JWT secret
             key = SUPABASE_JWT_SECRET
             
         payload = jwt.decode(
             token, 
             key, 
             algorithms=[token_alg], 
-            options={"verify_aud": False} # Supabase aud can vary
+            options={"verify_aud": False}
         )
         return payload
     except Exception as e:
         print(f"JWT Verification Failed: {type(e).__name__} - {str(e)}")
+        raise e
+
+def verify_supabase_token(credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)]):
+    """
+    Verifies that the provided JWT token was issued by Supabase.
+    """
+    token = credentials.credentials
+    try:
+        return validate_token_string(token)
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Could not validate credentials: {str(e)}",

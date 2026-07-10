@@ -40,6 +40,13 @@ async def health_check():
     return {"status": "ok", "version": "1.0.0"}
 
 
+import asyncio
+from services.websocket import manager
+
+@app.on_event("startup")
+async def startup_event():
+    manager.loop = asyncio.get_running_loop()
+
 # ─── Root Redirect ────────────────────────────────────────────────────────────
 @app.get("/", tags=["System"])
 async def root():
@@ -48,4 +55,7 @@ async def root():
 
 # ─── TODO: Register API routers here as we build them ─────────────────────────
 from api.api import api_router
+from api.endpoints import websockets
+
+app.include_router(websockets.router, prefix="/api/v1/ws", tags=["WebSockets"])
 app.include_router(api_router, prefix="/api/v1")

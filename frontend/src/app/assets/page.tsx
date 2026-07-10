@@ -6,7 +6,7 @@ import { apiClient } from "@/lib/api";
 import AddTransformerModal from "@/components/forms/AddTransformerModal";
 import {
   Plus, Search, LayoutDashboard, Zap, ChevronUp, ChevronDown,
-  RefreshCw, AlertTriangle, CheckCircle, Clock, ArrowRight, Filter
+  RefreshCw, AlertTriangle, CheckCircle, Clock, ArrowRight, Filter, Download
 } from "lucide-react";
 
 interface Transformer {
@@ -126,6 +126,49 @@ export default function AssetsPage() {
       ? sortDir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />
       : <ChevronDown size={12} className="opacity-20" />;
 
+  const exportToCSV = () => {
+    if (displayed.length === 0) return;
+    
+    // Headers
+    const headers = [
+      "Asset Code",
+      "Substation",
+      "Capacity (kVA)",
+      "Status",
+      "Risk Tier",
+      "AI Anomaly Score",
+      "Expected Lifetime (Days)",
+      "Location"
+    ];
+    
+    // Rows
+    const rows = displayed.map(a => [
+      a.transformer_code,
+      a.substation_name || "—",
+      a.rated_kva,
+      a.operational_status,
+      a.risk_category || "UNKNOWN",
+      (a.anomaly_score ?? 0).toFixed(1) + "%",
+      a.expected_lifetime_days || "—",
+      `"${(a.district || a.address_text || "—").replace(/"/g, '""')}"`
+    ]);
+    
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(r => r.join(","))
+    ].join("\n");
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `gridmind_assets_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
       <AddTransformerModal open={showModal} onClose={() => setShowModal(false)} onSuccess={load} />
@@ -153,6 +196,9 @@ export default function AssetsPage() {
               </p>
             </div>
             <div className="flex items-center gap-3">
+              <button onClick={exportToCSV} disabled={displayed.length === 0} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                <Download size={15} /> Export CSV
+              </button>
               <button onClick={load} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors">
                 <RefreshCw size={15} className={loading ? "animate-spin" : ""} /> Refresh
               </button>

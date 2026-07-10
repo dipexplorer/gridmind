@@ -30,9 +30,46 @@ export function NotificationBell() {
 
   useEffect(() => {
     fetchAlerts();
-    // Poll every 30 seconds
-    const interval = setInterval(fetchAlerts, 30000);
-    return () => clearInterval(interval);
+
+    // Setup WebSocket
+    let ws: WebSocket;
+    const connectWS = async () => {
+      try {
+        const { supabase } = await import("@/lib/supabaseClient");
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
+        const wsUrl = API_URL.replace("http://", "ws://").replace("https://", "wss://") + `/ws/notifications?token=${session.access_token}`;
+        
+        ws = new WebSocket(wsUrl);
+        
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === "NEW_ALERT") {
+              setAlerts(prev => [data.alert, ...prev]);
+            }
+          } catch(e) {
+            console.error("WS Parse error", e);
+          }
+        };
+
+        ws.onclose = () => {
+          console.log("WS closed, attempting reconnect in 5s");
+          setTimeout(connectWS, 5000);
+        };
+      } catch (e) {
+        console.error("WS setup failed", e);
+      }
+    };
+
+    connectWS();
+
+    return () => {
+      if (ws) ws.close();
+    };
   }, []);
 
   // Close dropdown when clicking outside
