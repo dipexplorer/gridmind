@@ -107,12 +107,16 @@ class RealAIModel:
             # Clip between 0 and 100 to prevent database overflow
             anomaly_score = max(0.0, min(100.0, float(anomaly_score)))
 
+            # Fetch dynamic thresholds from settings
+            from crud import crud_system
+            settings = crud_system.get_settings(db)
+
             # Categorize Risk
-            if anomaly_score >= 75:
+            if anomaly_score >= settings.critical_threshold:
                 category = "CRITICAL"
-            elif anomaly_score >= 55:
+            elif anomaly_score >= settings.high_threshold:
                 category = "HIGH"
-            elif anomaly_score >= 35:
+            elif anomaly_score >= settings.medium_threshold:
                 category = "MEDIUM"
             else:
                 category = "LOW"
@@ -170,14 +174,22 @@ class RealAIModel:
         Mock fallback prediction service when ML models are missing or training failed.
         """
         base_score = random.uniform(10.0, 95.0)
-        if base_score > 80:
-            category = "CRITICAL"
-        elif base_score > 60:
-            category = "HIGH"
-        elif base_score > 40:
-            category = "MEDIUM"
-        else:
-            category = "LOW"
+        
+        from core.database import SessionLocal
+        from crud import crud_system
+        db = SessionLocal()
+        try:
+            settings = crud_system.get_settings(db)
+            if base_score >= settings.critical_threshold:
+                category = "CRITICAL"
+            elif base_score >= settings.high_threshold:
+                category = "HIGH"
+            elif base_score >= settings.medium_threshold:
+                category = "MEDIUM"
+            else:
+                category = "LOW"
+        finally:
+            db.close()
             
         shap_values = []
         for feature in self.features:

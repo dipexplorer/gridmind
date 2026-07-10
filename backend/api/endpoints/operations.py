@@ -6,9 +6,26 @@ from datetime import datetime
 
 from core.database import get_db
 from models.event import MaintenanceTicket, Alert, MaintenanceLog
-from schemas.operations import TicketResponse, AlertResponse, TicketResolveRequest
+from schemas.operations import TicketResponse, AlertResponse, TicketResolveRequest, SystemSettingsResponse, SystemSettingsUpdateRequest
+from crud import crud_system
 
 router = APIRouter()
+
+@router.get("/settings", response_model=SystemSettingsResponse)
+def get_settings(db: Session = Depends(get_db)):
+    """
+    Get system settings.
+    """
+    return crud_system.get_settings(db)
+
+@router.put("/settings", response_model=SystemSettingsResponse)
+def update_settings(req: SystemSettingsUpdateRequest, db: Session = Depends(get_db)):
+    """
+    Update system settings.
+    """
+    if req.critical_threshold <= req.high_threshold or req.high_threshold <= req.medium_threshold:
+        raise HTTPException(status_code=400, detail="Thresholds must be strictly ordered: critical > high > medium")
+    return crud_system.update_settings(db, req.critical_threshold, req.high_threshold, req.medium_threshold)
 
 @router.get("/tickets", response_model=List[TicketResponse])
 def get_all_tickets(status: str = None, db: Session = Depends(get_db)):

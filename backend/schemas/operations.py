@@ -34,3 +34,18 @@ class TicketResponse(BaseModel):
 class TicketResolveRequest(BaseModel):
     resolution_notes: str
     outcome: str = "COMPLETED"
+
+class SystemSettingsResponse(BaseModel):
+    id: str
+    critical_threshold: float
+    high_threshold: float
+    medium_threshold: float
+    updated_at: datetime
+    
+    class Config:
+        orm_mode = True
+
+class SystemSettingsUpdateRequest(BaseModel):
+    critical_threshold: float
+    high_threshold: float
+    medium_threshold: float
