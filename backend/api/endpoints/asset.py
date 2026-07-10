@@ -51,7 +51,7 @@ def create_transformer(transformer: TransformerCreate, db: Session = Depends(get
     return crud_asset.create_transformer(db=db, transformer=transformer)
 
 @router.get("/transformers/", response_model=List[TransformerResponse])
-def read_transformers(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def read_transformers(skip: int = 0, limit: int = 1000, db: Session = Depends(get_db)):
     """
     Saare Transformers ki list fetch karna
     """

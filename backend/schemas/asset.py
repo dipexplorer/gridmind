@@ -64,17 +64,29 @@ class TransformerBase(BaseModel):
     address_text: Optional[str] = None
     district: Optional[str] = Field(None, max_length=64)
     block: Optional[str] = Field(None, max_length=64)
-    is_flood_prone: bool = False
-    is_high_lightning: bool = False
+    is_flood_prone: Optional[bool] = False
+    is_high_lightning: Optional[bool] = False
     
-    installation_date: date
+    installation_date: Optional[date] = None
     last_oil_test_date: Optional[date] = None
     commissioning_date: Optional[date] = None
     
-    num_consumers: int = 0
-    consumer_category: str = Field("MIXED", max_length=32)
-    area_criticality: float = 1.0
-    operational_status: str = Field("IN_SERVICE", max_length=32)
+    num_consumers: Optional[int] = 0
+    consumer_category: Optional[str] = Field("MIXED", max_length=32)
+    area_criticality: Optional[float] = 1.0
+    operational_status: Optional[str] = Field("IN_SERVICE", max_length=32)
+
+    # Real-time fields from live sync
+    age_years: Optional[int] = None
+    is_metered: Optional[bool] = None
+    current_load_kw: Optional[float] = None
+    current_load_pct: Optional[float] = None
+    current_oil_temp_c: Optional[float] = None
+    current_health_score: Optional[int] = None
+    current_failure_risk: Optional[float] = None
+    current_status: Optional[str] = None
+    last_updated: Optional[datetime] = None
+
 
 class TransformerCreate(TransformerBase):
     feeder_id: Optional[uuid.UUID] = None

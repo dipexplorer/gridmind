@@ -6,8 +6,30 @@ def get_latest_score_run(db: Session):
     return db.query(ScoreRunMetadata).order_by(ScoreRunMetadata.started_at.desc()).first()
 
 def get_transformer_score(db: Session, transformer_id: str):
-    # Get the latest score for this specific transformer
-    return db.query(TransformerScore).filter(TransformerScore.transformer_id == transformer_id).order_by(TransformerScore.calculated_at.desc()).first()
+    # Fetch live data from the newly synced transformers table
+    from models.asset import Transformer
+    transformer = db.query(Transformer).filter(Transformer.id == transformer_id).first()
+    
+    if transformer:
+        cat = "LOW"
+        if transformer.current_status == "critical":
+            cat = "CRITICAL"
+        elif transformer.current_status == "warning":
+            cat = "HIGH"
+            
+        import uuid
+        return {
+            "id": str(uuid.uuid4()),
+            "transformer_id": transformer_id,
+            "run_id": "00000000-0000-0000-0000-000000000000",
+            "anomaly_score": transformer.current_failure_risk or 0.0,
+            "risk_category": cat,
+            "expected_lifetime_days": 365 if cat == "LOW" else (30 if cat == "HIGH" else 7),
+            "confidence_interval_lower": 0,
+            "confidence_interval_upper": 1,
+            "calculated_at": transformer.last_updated or datetime.now(timezone.utc)
+        }
+    return None
 
 def get_shap_explanations(db: Session, score_id: str):
     return db.query(ShapExplanation).filter(ShapExplanation.score_id == score_id).all()

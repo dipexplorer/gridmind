@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from sqlalchemy import String, Numeric, Boolean, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
@@ -63,6 +63,17 @@ class Transformer(Base, UUIDMixin, TimestampMixin):
     
     operational_status: Mapped[str] = mapped_column(String(32), default='IN_SERVICE', nullable=False)
     
+    # Real-time data from Digital Twin pipeline
+    age_years: Mapped[Optional[int]] = mapped_column()
+    is_metered: Mapped[Optional[bool]] = mapped_column()
+    current_load_kw: Mapped[Optional[float]] = mapped_column()
+    current_load_pct: Mapped[Optional[float]] = mapped_column()
+    current_oil_temp_c: Mapped[Optional[float]] = mapped_column()
+    current_health_score: Mapped[Optional[int]] = mapped_column()
+    current_failure_risk: Mapped[Optional[float]] = mapped_column()
+    current_status: Mapped[Optional[str]] = mapped_column(String(50))
+    last_updated: Mapped[Optional[datetime]] = mapped_column()
+
     created_by: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     
     feeder = relationship("Feeder", back_populates="transformers")
