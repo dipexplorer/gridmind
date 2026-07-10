@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -19,7 +19,7 @@ export default function LoginPage() {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        router.push('/');
+        router.push('/dashboard');
       }
     };
     checkSession();
@@ -39,7 +39,7 @@ export default function LoginPage() {
         });
         if (error) throw error;
         if (data.session) {
-          router.push('/');
+          router.push('/dashboard');
         }
       } else {
         const { data, error } = await supabase.auth.signUp({
@@ -63,39 +63,39 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden">
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden">
       {/* Background gradients */}
-      <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/20 blur-[120px]" />
-      <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-cyan-600/20 blur-[120px]" />
+      <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-400/20 blur-[120px]" />
+      <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-cyan-400/20 blur-[120px]" />
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
         <div className="flex justify-center">
-          <div className="h-14 w-14 bg-blue-500/10 rounded-2xl border border-blue-500/20 flex items-center justify-center backdrop-blur-sm shadow-[0_0_15px_rgba(59,130,246,0.3)]">
-            <Zap className="h-8 w-8 text-blue-400" />
+          <div className="h-14 w-14 bg-white rounded-2xl border border-slate-200 flex items-center justify-center backdrop-blur-sm shadow-sm">
+            <Zap className="h-8 w-8 text-blue-600" />
           </div>
         </div>
-        <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-white">
+        <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-slate-900">
           GridMind Portal
         </h2>
-        <p className="mt-2 text-center text-sm text-slate-400">
+        <p className="mt-2 text-center text-sm text-slate-500">
           Sign in or create an account to access the platform
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10">
-        <div className="bg-slate-900/60 backdrop-blur-xl py-8 px-4 shadow-2xl shadow-blue-900/10 sm:rounded-2xl sm:px-10 border border-slate-800">
+        <div className="bg-white/90 backdrop-blur-xl py-8 px-4 shadow-xl shadow-slate-200/50 sm:rounded-2xl sm:px-10 border border-slate-200">
           
           {/* Tabs */}
-          <div className="flex mb-6 border-b border-slate-800">
+          <div className="flex mb-6 border-b border-slate-100">
             <button
               onClick={() => setIsLogin(true)}
-              className={`flex-1 pb-3 text-sm font-medium ${isLogin ? 'text-blue-500 border-b-2 border-blue-500' : 'text-slate-400 hover:text-slate-300'}`}
+              className={`flex-1 pb-3 text-sm font-bold ${isLogin ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400 hover:text-slate-600 transition-colors'}`}
             >
               Sign In
             </button>
             <button
               onClick={() => setIsLogin(false)}
-              className={`flex-1 pb-3 text-sm font-medium ${!isLogin ? 'text-blue-500 border-b-2 border-blue-500' : 'text-slate-400 hover:text-slate-300'}`}
+              className={`flex-1 pb-3 text-sm font-bold ${!isLogin ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400 hover:text-slate-600 transition-colors'}`}
             >
               Sign Up
             </button>
@@ -103,7 +103,7 @@ export default function LoginPage() {
 
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="email" className="block text-sm font-medium leading-6 text-slate-300">
+              <label htmlFor="email" className="block text-sm font-bold leading-6 text-slate-700">
                 Email address
               </label>
               <div className="mt-2">
@@ -115,13 +115,13 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full rounded-lg border-0 bg-slate-800/50 py-2.5 px-3.5 text-white shadow-sm ring-1 ring-inset ring-slate-700 placeholder:text-slate-500 focus:ring-2 focus:ring-inset focus:ring-blue-500 sm:text-sm sm:leading-6 backdrop-blur-sm transition-all"
+                  className="block w-full rounded-xl border-0 bg-slate-50 py-2.5 px-3.5 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-200 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6 backdrop-blur-sm transition-all"
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium leading-6 text-slate-300">
+              <label htmlFor="password" className="block text-sm font-bold leading-6 text-slate-700">
                 Password
               </label>
               <div className="mt-2">
@@ -133,20 +133,20 @@ export default function LoginPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full rounded-lg border-0 bg-slate-800/50 py-2.5 px-3.5 text-white shadow-sm ring-1 ring-inset ring-slate-700 placeholder:text-slate-500 focus:ring-2 focus:ring-inset focus:ring-blue-500 sm:text-sm sm:leading-6 backdrop-blur-sm transition-all"
+                  className="block w-full rounded-xl border-0 bg-slate-50 py-2.5 px-3.5 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-200 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6 backdrop-blur-sm transition-all"
                 />
               </div>
             </div>
 
             {error && (
-              <div className="rounded-md bg-red-500/10 p-4 border border-red-500/20">
-                <h3 className="text-sm font-medium text-red-400">{error}</h3>
+              <div className="rounded-xl bg-red-50 p-4 border border-red-100">
+                <h3 className="text-sm font-bold text-red-600">{error}</h3>
               </div>
             )}
 
             {success && (
-              <div className="rounded-md bg-green-500/10 p-4 border border-green-500/20">
-                <h3 className="text-sm font-medium text-green-400">{success}</h3>
+              <div className="rounded-xl bg-emerald-50 p-4 border border-emerald-100">
+                <h3 className="text-sm font-bold text-emerald-600">{success}</h3>
               </div>
             )}
 
@@ -154,7 +154,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex w-full justify-center items-center rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className="flex w-full justify-center items-center rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-bold leading-6 text-white shadow-md shadow-blue-500/20 hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
               >
                 {loading ? (
                   <>

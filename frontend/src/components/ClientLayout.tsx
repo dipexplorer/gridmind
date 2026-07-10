@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import AuthGuard from '@/components/AuthGuard';
+import { NotificationBell } from '@/components/layout/NotificationBell';
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -43,7 +44,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
         {/* User / Actions */}
         <div className="flex items-center gap-4">
-          <div className="hidden sm:block text-right">
+          <NotificationBell />
+          <div className="hidden sm:block text-right border-l border-slate-200 pl-4">
             <p className="text-sm font-bold text-slate-700 leading-tight">Admin User</p>
             <p className="text-[10px] font-semibold text-slate-400 uppercase">System Operator</p>
           </div>
