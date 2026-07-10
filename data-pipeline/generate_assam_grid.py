@@ -103,16 +103,52 @@ CAPACITIES = [25, 63, 100, 100, 100, 200, 200, 250, 315, 500]
 FEEDER_RANGE = (1, 12)
 
 
-def sample_point_in_zone(lat_c: float, lon_c: float, radius: float) -> tuple:
-    """Sample a random point within a rough circular zone using Gaussian distribution."""
-    # Use truncated Gaussian — 80% within radius, 20% on periphery
-    angle = random.uniform(0, 2 * math.pi)
-    dist  = abs(random.gauss(0, radius * 0.5))
-    dist  = min(dist, radius)
-    lat = lat_c + dist * math.cos(angle)
-    lon = lon_c + dist * math.sin(angle)
-    return round(lat, 7), round(lon, 7)
+# Load the real OSM proxy coordinates
+import json
+PROXY_FILE = os.path.join(OUTPUT_DIR, "proxy_points.json")
+if not os.path.exists(PROXY_FILE):
+    raise FileNotFoundError(f"Proxy file {PROXY_FILE} not found. Please run fetch_proxy_grid.py first.")
 
+with open(PROXY_FILE, "r", encoding="utf-8") as f:
+    ALL_PROXIES = json.load(f)
+
+print(f"Loaded {len(ALL_PROXIES)} proxy coordinates for mapping.")
+
+def get_proxy_points_for_zone(lat_c: float, lon_c: float, radius: float, count: int) -> list:
+    """Find and return real proxy coordinates closest to the zone center."""
+    # Score each proxy by distance to zone center
+    scored_proxies = []
+    for p in ALL_PROXIES:
+        dist = math.sqrt((p["lat"] - lat_c)**2 + (p["lon"] - lon_c)**2)
+        if dist <= radius:
+            scored_proxies.append((dist, p))
+            
+    # Sort by distance
+    scored_proxies.sort(key=lambda x: x[0])
+    
+    # If we have enough proxies, sample randomly from the closest ones
+    # otherwise, sample with replacement and add tiny jitter (10-30 meters) to avoid exact overlaps
+    sampled = []
+    if len(scored_proxies) >= count:
+        chosen = random.sample(scored_proxies[:int(count * 1.5)], count)
+        for _, p in chosen:
+            sampled.append((p["lat"], p["lon"]))
+    else:
+        # Not enough proxy points in this exact zone radius, fallback to nearest overall
+        all_scored = []
+        for p in ALL_PROXIES:
+            dist = math.sqrt((p["lat"] - lat_c)**2 + (p["lon"] - lon_c)**2)
+            all_scored.append((dist, p))
+        all_scored.sort(key=lambda x: x[0])
+        
+        # Take the closest ones and reuse them with tiny jitter
+        for i in range(count):
+            _, p = all_scored[i % len(all_scored)]
+            jitter_lat = random.uniform(-0.0002, 0.0002) if i >= len(all_scored) else 0.0
+            jitter_lon = random.uniform(-0.0002, 0.0002) if i >= len(all_scored) else 0.0
+            sampled.append((p["lat"] + jitter_lat, p["lon"] + jitter_lon))
+            
+    return sampled
 
 def generate_transformer_name(zone_name: str, seq: int) -> str:
     """Generate a plausible transformer name."""
@@ -136,8 +172,12 @@ def main():
 
     for (code, zone_name, district, lat_c, lon_c, radius, count) in APDCL_ZONES:
         print(f"  [{code}] {zone_name} ({district}) → {count} transformers")
+        
+        # Get proxy coordinates for this zone
+        coords = get_proxy_points_for_zone(lat_c, lon_c, radius, count)
+        
         for i in range(count):
-            lat, lon = sample_point_in_zone(lat_c, lon_c, radius)
+            lat, lon = coords[i]
             capacity = random.choice(CAPACITIES)
             feeder   = random.randint(*FEEDER_RANGE)
             osm_id   = osm_id_start

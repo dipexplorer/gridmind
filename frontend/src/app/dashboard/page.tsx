@@ -81,20 +81,22 @@ export default function Dashboard() {
       const trRes = await apiClient.get("/transformers/");
       const transformers: Transformer[] = trRes.data;
 
-      // 3. Fetch scores for each transformer (in parallel)
-      const combined: CombinedData[] = await Promise.all(
-        transformers.map(async (t) => {
-          const substation_name = t.substation_id ? subMap.get(t.substation_id) : "Unknown Substation";
-          try {
-            const scoreRes = await apiClient.get(`/transformers/${t.id}/risk-score`);
-            return { ...t, ...scoreRes.data, id: t.id, substation_name };
-          } catch (e) {
-            console.error(`Failed to fetch score for ${t.id}`);
-          }
-          // Fallback if no score
-          return { ...t, anomaly_score: 0, risk_category: "UNKNOWN", expected_lifetime_days: 0, substation_name };
-        })
-      );
+      // 3. Map scores using data already returned by the main API to avoid N+1 requests
+      const combined: CombinedData[] = transformers.map((t: any) => {
+        const substation_name = t.substation_id ? subMap.get(t.substation_id) : "Unknown Substation";
+        let cat = "LOW";
+        if (t.current_status === "critical") cat = "CRITICAL";
+        else if (t.current_status === "warning" || t.current_status === "overloaded") cat = "HIGH";
+        
+        return {
+          ...t,
+          id: t.id,
+          substation_name,
+          anomaly_score: (t.current_failure_risk || 0) * 100,
+          risk_category: cat,
+          expected_lifetime_days: cat === "LOW" ? 365 : (cat === "HIGH" ? 30 : 7)
+        };
+      });
       
       
       // 4. Fetch open tickets

@@ -36,6 +36,7 @@ import json
 import math
 import os
 import random
+import argparse
 from datetime import datetime, timezone
 
 # ---------------------------------------------------------------------------
@@ -167,7 +168,7 @@ def assign_status(load_pct: float, health: int, failure_risk: float) -> str:
 # Main engine
 # ---------------------------------------------------------------------------
 
-def run_engine() -> list:
+def run_engine(stress_test=False) -> list:
     if not os.path.exists(INPUT_FILE):
         raise FileNotFoundError(
             f"Weather CSV not found: {INPUT_FILE}\n"
@@ -213,7 +214,10 @@ def run_engine() -> list:
         # Load calculation:
         # Base load as % of capacity, modulated by time-of-day and weather
         base_load_pct = rng.gauss(68, 18)   # centred around 68% utilisation
-        base_load_pct = max(5, min(130, base_load_pct))  # physical limits
+        base_load_pct = max(5, min(130, base_load_pct))
+        if stress_test:
+            base_load_pct += rng.uniform(30, 60)
+            temp_c += rng.uniform(10, 20)  # physical limits
 
         # Weather adjustment: hot days → AC load ↑; storms → instability
         weather_adj = (temp_c - AMBIENT_REF) * 0.4         # +0.4% per °C above 25
@@ -249,6 +253,8 @@ def run_engine() -> list:
             "capacity_kva":     round(capacity_kva, 1),
             "feeder_no":        row.get("Feeder No") or row.get("feeder_no", ""),
             "sub_div_code":     row.get("Sub Div Code") or row.get("sub_div_code", "133"),
+            "district":         row.get("district", "Unknown"),
+            "operational_status": "IN_SERVICE",
             # Operational
             "load_kw":          load_kw,
             "load_pct":         load_pct,
@@ -305,10 +311,13 @@ def save_outputs(rows: list):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--stress-test", action="store_true", help="Force critical loads")
+    args = parser.parse_args()
     print("="*60)
     print("STEP 3: DIGITAL TWIN ENGINE — Calibrated Simulation")
     print("="*60)
-    rows = run_engine()
+    rows = run_engine(stress_test=args.stress_test)
     save_outputs(rows)
     print(f"\n  Total records: {len(rows):,}")
     print("\nNext step: python supabase_sync.py")

@@ -46,17 +46,23 @@ export default function NetworkMapPage() {
       const trRes = await apiClient.get('/transformers/');
       const transformers: Transformer[] = trRes.data;
 
-      // Fetch risk scores in parallel
-      const combined: CombinedData[] = await Promise.all(
-        transformers.map(async (t) => {
-          const substation_name = t.substation_id ? subMap.get(t.substation_id) : 'Unknown';
-          try {
-            const scoreRes = await apiClient.get(`/transformers/${t.id}/risk-score`);
-            return { ...t, ...scoreRes.data, id: t.id, substation_name };
-          } catch {}
-          return { ...t, anomaly_score: 0, risk_category: 'UNKNOWN', expected_lifetime_days: 0, substation_name };
-        })
-      );
+      // Map the live real-time status data already present in the transformers response
+      // to the format the UI expects, avoiding 1362 separate API calls.
+      const combined: CombinedData[] = transformers.map((t: any) => {
+        const substation_name = t.substation_id ? subMap.get(t.substation_id) : 'Unknown';
+        
+        let cat = 'LOW';
+        if (t.current_status === 'critical') cat = 'CRITICAL';
+        if (t.current_status === 'warning') cat = 'HIGH';
+        
+        return { 
+          ...t, 
+          anomaly_score: t.current_failure_risk || 0.0, 
+          risk_category: cat, 
+          expected_lifetime_days: cat === 'LOW' ? 365 : (cat === 'HIGH' ? 30 : 7), 
+          substation_name 
+        };
+      });
 
       setData(combined);
     } catch (err) {
