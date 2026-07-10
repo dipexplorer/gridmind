@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { BentoCard } from '@/components/widgets/BentoCard';
 import { AIRiskWidget } from '@/components/widgets/AIRiskWidget';
 import { TransformerListWidget } from '@/components/widgets/TransformerListWidget';
+import { TicketsWidget, Ticket } from '@/components/widgets/TicketsWidget';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { Activity, Zap, ShieldAlert, Cpu, Database, BarChart3, ArrowRight, Server } from 'lucide-react';
@@ -45,6 +46,7 @@ interface CombinedData extends Transformer, Partial<RiskScore> {
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<CombinedData[]>([]);
+  const [tickets, setTickets] = useState<Ticket[]>([]);
   const [aiRunStatus, setAiRunStatus] = useState<string>("Loading...");
   const [scanning, setScanning] = useState(false);
 
@@ -93,6 +95,20 @@ export default function Dashboard() {
           return { ...t, anomaly_score: 0, risk_category: "UNKNOWN", expected_lifetime_days: 0, substation_name };
         })
       );
+      
+      
+      // 4. Fetch open tickets
+      try {
+        const tixRes = await apiClient.get("/operations/tickets?status=OPEN");
+        // Enrich tickets with transformer names
+        const enrichedTickets = tixRes.data.map((t: any) => {
+          const matchingTr = transformers.find(tr => tr.id === t.transformer_id);
+          return { ...t, transformer_name: matchingTr?.name || t.transformer_id };
+        });
+        setTickets(enrichedTickets);
+      } catch(e) {
+        console.error("Failed to fetch tickets", e);
+      }
       
       setData(combined);
       
@@ -389,6 +405,13 @@ export default function Dashboard() {
         <BentoCard className="row-span-2 p-5" title="Critical Attention">
           <div className="mt-4 flex-1 h-[240px]">
             <TransformerListWidget transformers={filteredData as any} />
+          </div>
+        </BentoCard>
+
+        {/* Tickets Widget (Span 4 columns, span 2 rows) */}
+        <BentoCard className="md:col-span-2 lg:col-span-4 row-span-2 p-5" title="Active Maintenance Tickets">
+          <div className="mt-4 flex-1 h-[240px]">
+            <TicketsWidget tickets={tickets} onTicketResolved={loadDashboardData} />
           </div>
         </BentoCard>
 

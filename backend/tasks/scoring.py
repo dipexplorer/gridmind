@@ -45,7 +45,28 @@ def score_all_transformers(task_id: str = None):
             
             if prediction["risk_category"] in ["HIGH", "CRITICAL"]:
                 anomalies_detected += 1
+                # Create an Alert and Ticket in the Database automatically
+                from models.event import Alert, MaintenanceTicket
                 
+                alert_msg = f"AI Predicted {prediction['risk_category']} risk for transformer {t.name}."
+                alert = Alert(
+                    transformer_id=t.id,
+                    severity=prediction["risk_category"],
+                    message=alert_msg
+                )
+                db.add(alert)
+                db.flush() # flush to get alert.id
+                
+                ticket = MaintenanceTicket(
+                    transformer_id=t.id,
+                    alert_id=alert.id,
+                    status="OPEN",
+                    priority=prediction["risk_category"],
+                    description=f"Auto-generated ticket due to {prediction['risk_category']} anomaly score: {prediction['anomaly_score']}"
+                )
+                db.add(ticket)
+                
+        db.commit()
         # Mark run as completed
         crud_intelligence.update_score_run(
             db=db, 

@@ -50,3 +50,31 @@ class FailureEvent(Base, UUIDMixin, TimestampMixin):
     replacement_cost_inr: Mapped[Optional[float]] = mapped_column(Numeric(12, 2))
     
     reported_by: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+class Alert(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "alerts"
+
+    transformer_id: Mapped[str] = mapped_column(UUID(as_uuid=True), ForeignKey("transformers.id", ondelete="CASCADE"), nullable=False)
+    
+    severity: Mapped[str] = mapped_column(String(16), nullable=False) # HIGH, CRITICAL
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    
+    is_acknowledged: Mapped[bool] = mapped_column(Boolean, default=False)
+    acknowledged_by: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    acknowledged_at: Mapped[Optional[datetime]]
+
+class MaintenanceTicket(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "maintenance_tickets"
+
+    transformer_id: Mapped[str] = mapped_column(UUID(as_uuid=True), ForeignKey("transformers.id", ondelete="CASCADE"), nullable=False)
+    alert_id: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=True), ForeignKey("alerts.id", ondelete="SET NULL"))
+    
+    status: Mapped[str] = mapped_column(String(32), default="OPEN") # OPEN, IN_PROGRESS, RESOLVED
+    priority: Mapped[str] = mapped_column(String(16), default="MEDIUM") # LOW, MEDIUM, HIGH, CRITICAL
+    
+    assigned_to: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    due_date: Mapped[Optional[date]]
+    
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    resolution_notes: Mapped[Optional[str]] = mapped_column(Text)
+    resolved_at: Mapped[Optional[datetime]]
