@@ -90,3 +90,5 @@ docker-compose.override.yml
 # ─── Uploads / Temp ───────────────────────────────────────────────────────────
 /tmp/
 uploads/
+data/
+data/APDCL/

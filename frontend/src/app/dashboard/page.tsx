@@ -222,17 +222,6 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-4">
           <span className="text-xs font-semibold bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full">{aiRunStatus}</span>
-          <button 
-            onClick={triggerAIScan}
-            disabled={scanning}
-            className={`
-              bg-primary hover:bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium transition-all shadow-sm shadow-blue-500/20 flex items-center gap-2
-              ${scanning ? 'opacity-50 cursor-wait' : 'cursor-pointer'}
-            `}
-          >
-            <Zap size={18} className={scanning ? 'animate-bounce' : ''} />
-            {scanning ? 'Running AI Scan...' : 'Force AI Scan'}
-          </button>
         </div>
       </div>
 
@@ -357,15 +346,37 @@ export default function Dashboard() {
           </div>
         </BentoCard>
 
-        {/* KPI: Model Info (Span 1) */}
+        {/* KPI: System Operations (Span 1) */}
         <BentoCard className="flex flex-col justify-between p-6">
-          <div className="flex justify-between items-start">
-            <span className="font-heading font-bold text-xs uppercase tracking-wider text-slate-400">AI Model Version</span>
-            <div className="p-2 bg-purple-50 text-purple-600 rounded-xl"><Server size={20} /></div>
+          <div className="flex justify-between items-start mb-2">
+            <span className="font-heading font-bold text-xs uppercase tracking-wider text-slate-400">Operations</span>
+            <div className="p-2 bg-slate-50 text-slate-600 rounded-xl"><Server size={20} /></div>
           </div>
-          <div>
-            <div className="text-2xl font-extrabold text-slate-900">v2.1.0-beta</div>
-            <p className="text-xs text-purple-600 font-semibold mt-1">Isolation Forest + SHAP</p>
+          <div className="flex flex-col gap-2 mt-auto">
+            <button 
+              onClick={triggerAIScan}
+              disabled={scanning}
+              className="flex items-center justify-between bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-2 rounded-lg text-xs font-bold transition-colors w-full"
+            >
+              <span className="flex items-center gap-1.5"><Zap size={14} className={scanning ? 'animate-bounce' : ''} /> {scanning ? 'Scanning...' : 'Force AI Scan'}</span>
+              <ArrowRight size={14} />
+            </button>
+            <button 
+              onClick={() => {
+                const csvContent = "data:text/csv;charset=utf-8,Asset Code,Status,Risk\n" + filteredData.map(d => `${d.transformer_code},${d.operational_status},${d.risk_category}`).join("\n");
+                const encodedUri = encodeURI(csvContent);
+                const link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                link.setAttribute("download", `system_report_${new Date().toISOString().split('T')[0]}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              }}
+              className="flex items-center justify-between bg-slate-50 hover:bg-slate-100 text-slate-700 px-3 py-2 rounded-lg text-xs font-bold transition-colors w-full"
+            >
+              <span className="flex items-center gap-1.5"><Download size={14} /> Export Report</span>
+              <ArrowRight size={14} />
+            </button>
           </div>
         </BentoCard>
 
