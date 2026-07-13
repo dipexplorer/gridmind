@@ -504,6 +504,13 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                 <div className="relative w-32 h-32 flex-shrink-0">
                   <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90">
                     <circle cx="60" cy="60" r="50" fill="none" stroke="#F1F5F9" strokeWidth="12" />
+                    {/* Base score arc (grey-blue) */}
+                    {weather && weather.weather_penalty_percentage > 0 && (
+                      <circle cx="60" cy="60" r="50" fill="none" stroke="#93C5FD" strokeWidth="12"
+                        strokeDasharray={`${2 * Math.PI * 50 * Math.max(0, (risk?.anomaly_score ?? 0) - weather.weather_penalty_percentage) / 100} ${2 * Math.PI * 50}`}
+                        strokeLinecap="round" />
+                    )}
+                    {/* Total score arc */}
                     <circle cx="60" cy="60" r="50" fill="none" stroke={scoreColor} strokeWidth="12"
                       strokeDasharray={`${2 * Math.PI * 50 * (risk?.anomaly_score ?? 0) / 100} ${2 * Math.PI * 50}`}
                       strokeLinecap="round" className="transition-all duration-1000 ease-out" />
@@ -530,8 +537,54 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                   ))}
                 </div>
               </div>
+
+              {/* Weather Factor Breakdown — shows only when weather data is available */}
+              {weather && (
+                <div className={`mt-5 pt-5 border-t border-slate-100 rounded-2xl p-4 ${weather.weather_penalty_percentage > 0 ? "bg-orange-50 border border-orange-100" : "bg-emerald-50 border border-emerald-100"}`}>
+                  <p className={`text-[10px] font-extrabold uppercase tracking-widest mb-3 ${weather.weather_penalty_percentage > 0 ? "text-orange-600" : "text-emerald-600"}`}>
+                    {weather.weather_penalty_percentage > 0 ? "⚠️ Ambient Heat Stress Applied" : "✅ No Weather Penalty Applied"}
+                  </p>
+                  <div className="space-y-2">
+                    {/* Base score row */}
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-blue-400 flex-shrink-0" />
+                        <span className="text-slate-600 font-semibold">Base AI Score</span>
+                        <span className="text-slate-400 text-[10px]">(Isolation Forest model)</span>
+                      </div>
+                      <span className="font-extrabold text-slate-800">
+                        {Math.max(0, (risk?.anomaly_score ?? 0) - weather.weather_penalty_percentage).toFixed(1)}
+                      </span>
+                    </div>
+                    {/* Weather penalty row */}
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${weather.weather_penalty_percentage > 0 ? "bg-orange-400" : "bg-slate-200"}`} />
+                        <span className="text-slate-600 font-semibold">
+                          {weather.is_hot_day ? "☀️" : "☁️"} Weather Penalty
+                        </span>
+                        <span className="text-slate-400 text-[10px]">({weather.ambient_temperature_c.toFixed(1)}°C ambient)</span>
+                      </div>
+                      <span className={`font-extrabold ${weather.weather_penalty_percentage > 0 ? "text-orange-600" : "text-slate-400"}`}>
+                        {weather.weather_penalty_percentage > 0 ? `+${weather.weather_penalty_percentage.toFixed(1)}` : "0.0"}
+                      </span>
+                    </div>
+                    {/* Divider & total */}
+                    <div className="border-t border-slate-200 pt-2 flex items-center justify-between text-xs">
+                      <span className="font-extrabold text-slate-700">= Final Risk Score</span>
+                      <span className="font-black text-base" style={{ color: scoreColor }}>{(risk?.anomaly_score ?? 0).toFixed(1)}</span>
+                    </div>
+                  </div>
+                  {weather.weather_penalty_percentage > 0 && (
+                    <p className="text-[10px] text-orange-600 mt-2 font-medium">
+                      Outdoor temp {weather.ambient_temperature_c.toFixed(1)}°C exceeds 35°C threshold — thermal stress adds +{weather.weather_penalty_percentage.toFixed(1)}% to failure risk.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
+
 
           {/* RIGHT: Sidebar Column */}
           <div className="space-y-6">
