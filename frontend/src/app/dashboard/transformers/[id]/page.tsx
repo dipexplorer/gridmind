@@ -28,6 +28,7 @@ interface TSPoint { time: string; load_percentage: number; voltage_lv: number; c
 interface MLog { id: string; maintenance_date: string; maintenance_type: string; work_description?: string; findings?: string; oil_bdv_kv?: number; outcome: string; }
 interface ShapRow { feature_name: string; feature_value: number; shap_value: number; }
 interface Risk { anomaly_score: number; risk_category: string; expected_lifetime_days: number; }
+interface WeatherImpact { ambient_temperature_c: number; weather_penalty_percentage: number; is_hot_day: boolean; }
 
 const RISK_META: Record<string, { color: string; bg: string; border: string; glow: string; label: string }> = {
   CRITICAL: { color: "text-red-700",     bg: "bg-red-500",     border: "border-red-200",    glow: "shadow-red-500/30",    label: "CRITICAL" },
@@ -119,6 +120,7 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
   const [maintenance, setMaintenance] = useState<MLog[]>([]);
   const [shap, setShap]             = useState<ShapRow[]>([]);
   const [risk, setRisk]             = useState<Risk | null>(null);
+  const [weather, setWeather]       = useState<WeatherImpact | null>(null);
   const [activeChart, setActiveChart] = useState<"load" | "temp" | "voltage" | "current">("load");
 
   // Maintenance form
@@ -133,17 +135,19 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
       const [detailRes] = await Promise.allSettled([apiClient.get(`/transformers/${id}/detail`)]);
       if (detailRes.status === "fulfilled") setDetail(detailRes.value.data);
 
-      const [ts, maint, shapR, riskR] = await Promise.allSettled([
+      const [ts, maint, shapR, riskR, weatherR] = await Promise.allSettled([
         apiClient.get(`/transformers/${id}/timeseries`),
         apiClient.get(`/transformers/${id}/maintenance`),
         apiClient.get(`/transformers/${id}/shap-explanations`),
         apiClient.get(`/transformers/${id}/risk-score`),
+        apiClient.get(`/transformers/${id}/weather-impact`),
       ]);
       if (ts.status === "fulfilled")    setTimeseries(ts.value.data);
       if (maint.status === "fulfilled") setMaintenance(maint.value.data);
       if (shapR.status === "fulfilled") setShap(shapR.value.data);
       if (riskR.status === "fulfilled") setRisk(riskR.value.data);
       else setRisk({ anomaly_score: 0, risk_category: "UNKNOWN", expected_lifetime_days: 0 });
+      if (weatherR.status === "fulfilled") setWeather(weatherR.value.data);
     } finally {
       setLoading(false);
     }
@@ -271,6 +275,18 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                     <span className={`w-1.5 h-1.5 rounded-full ${riskMeta.bg} ${risk?.risk_category === "CRITICAL" ? "animate-pulse" : ""}`} />
                     {riskMeta.label} RISK
                   </span>
+                  
+                  {weather && weather.weather_penalty_percentage > 0 && (
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-200 shadow-sm" title={`Live Ambient Temp: ${weather.ambient_temperature_c}°C`}>
+                      ☀️ {weather.ambient_temperature_c.toFixed(1)}°C (Includes +{weather.weather_penalty_percentage.toFixed(1)}% Weather Penalty)
+                    </span>
+                  )}
+                  {weather && weather.weather_penalty_percentage === 0 && (
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 shadow-sm">
+                      ☁️ {weather.ambient_temperature_c.toFixed(1)}°C (Optimal Weather)
+                    </span>
+                  )}
+
                   <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
                     detail.operational_status === "IN_SERVICE"
                       ? "bg-emerald-50 text-emerald-700 border border-emerald-200"

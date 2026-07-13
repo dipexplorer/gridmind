@@ -168,3 +168,28 @@ def get_transformer_forecast(id: uuid.UUID, db: Session = Depends(get_db)):
         })
         
     return forecast
+
+@router.get("/transformers/{id}/weather-impact", response_model=Dict[str, Any])
+def get_weather_impact(id: uuid.UUID, db: Session = Depends(get_db)):
+    """
+    Fetch the live weather and calculate the thermal penalty currently applied to the Risk Score.
+    """
+    tx = db.query(Transformer).filter(Transformer.id == id).first()
+    if not tx:
+        raise HTTPException(status_code=404, detail="Transformer not found")
+        
+    lat = float(tx.latitude) if tx.latitude else 0.0
+    lon = float(tx.longitude) if tx.longitude else 0.0
+    
+    from services.ai_service import ai_service
+    ambient_temp = ai_service._fetch_live_weather(lat, lon)
+    
+    penalty = 0.0
+    if ambient_temp > 35.0:
+        penalty = min(15.0, (ambient_temp - 35.0) * 2.0)
+        
+    return {
+        "ambient_temperature_c": ambient_temp,
+        "weather_penalty_percentage": round(penalty, 2),
+        "is_hot_day": ambient_temp > 35.0
+    }
