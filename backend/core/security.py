@@ -17,10 +17,17 @@ def get_supabase_jwks():
     global _jwks_cache
     if not _jwks_cache:
         try:
-            # Derive project ref from POSTGRES_HOST (e.g., db.xyz.supabase.co -> xyz)
-            host_parts = settings.POSTGRES_HOST.split(".")
-            if len(host_parts) >= 3 and host_parts[0] == "db" and host_parts[-2:] == ["supabase", "co"]:
-                project_ref = host_parts[1]
+            # Try to derive project ref from POSTGRES_USER if using connection pooler (postgres.xyz)
+            project_ref = None
+            if "." in settings.POSTGRES_USER and settings.POSTGRES_USER.startswith("postgres."):
+                project_ref = settings.POSTGRES_USER.split(".")[1]
+            else:
+                # Fallback to deriving from POSTGRES_HOST (db.xyz.supabase.co)
+                host_parts = settings.POSTGRES_HOST.split(".")
+                if len(host_parts) >= 3 and host_parts[0] == "db" and host_parts[-2:] == ["supabase", "co"]:
+                    project_ref = host_parts[1]
+            
+            if project_ref:
                 jwks_url = f"https://{project_ref}.supabase.co/auth/v1/.well-known/jwks.json"
                 
                 # Fetch JWKS
