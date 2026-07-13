@@ -4,7 +4,7 @@ import logging
 import numpy as np
 import pandas as pd
 import joblib
-import shap
+# shap is imported lazily inside load_models() to avoid numba JIT at startup (prevents Render timeout)
 import scipy.integrate
 # Monkey patch trapz for newer scipy compatibility with lifelines unpickling
 if not hasattr(scipy.integrate, 'trapz'):
@@ -32,7 +32,10 @@ class RealAIModel:
         self.model = None
         self.survival_model = None
         self.explainer = None
-        self.load_models()
+        # Load models in background thread so the server starts instantly
+        # This prevents Render free-tier health-check timeouts
+        import threading
+        threading.Thread(target=self.load_models, daemon=True).start()
 
     def load_models(self):
         """
@@ -45,8 +48,10 @@ class RealAIModel:
         if os.path.exists(model_path):
             try:
                 self.model = joblib.load(model_path)
-                # Initialize TreeExplainer for scikit-learn Isolation Forest
-                self.explainer = shap.TreeExplainer(self.model)
+                # Lazy import shap here (not at module level) to avoid numba JIT compilation
+                # at startup which causes Render free-tier health-check timeout.
+                import shap as shap_lib
+                self.explainer = shap_lib.TreeExplainer(self.model)
                 logger.info("Successfully loaded Isolation Forest model and SHAP TreeExplainer.")
             except Exception as e:
                 logger.error(f"Failed to load Isolation Forest model: {e}")
