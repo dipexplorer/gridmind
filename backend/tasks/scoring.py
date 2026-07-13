@@ -48,7 +48,7 @@ def score_all_transformers(task_id: str = None):
                 # Create an Alert and Ticket in the Database automatically
                 from models.event import Alert, MaintenanceTicket
                 
-                alert_msg = f"AI Predicted {prediction['risk_category']} risk for transformer {t.name}."
+                alert_msg = f"AI Predicted {prediction['risk_category']} risk for transformer {t.transformer_code}."
                 alert = Alert(
                     transformer_id=t.id,
                     severity=prediction["risk_category"],

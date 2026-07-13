@@ -7,7 +7,7 @@ python-multipart==0.0.9        # Required for file uploads
 sqlalchemy==2.0.29
 alembic==1.13.1
 psycopg2-binary==2.9.9         # PostgreSQL driver
-geoalchemy2==0.14.6            # PostGIS support for SQLAlchemy
+geoalchemy2[shapely]==0.14.6            # PostGIS support for SQLAlchemy
 
 # ─── Cache / Task Queue ───────────────────────────────────────────────────────
 redis==5.0.3
