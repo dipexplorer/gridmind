@@ -119,11 +119,10 @@ def get_transformer_shap_explanations(id: uuid.UUID, db: Session = Depends(get_d
     if not score:
         # Return fallback SHAP values if no AI run has scored it yet
         return [
-            {"feature_name": "oil_temperature", "feature_value": 52.4, "shap_value": 0.0},
-            {"feature_name": "winding_temperature", "feature_value": 58.1, "shap_value": 0.0},
-            {"feature_name": "load_current", "feature_value": 110.2, "shap_value": 0.0},
-            {"feature_name": "ambient_temperature", "feature_value": 31.5, "shap_value": 0.0},
-            {"feature_name": "vibration_level", "feature_value": 2.1, "shap_value": 0.0}
+            {"feature_name": "temperature_c", "feature_value": 52.4, "shap_value": 0.15},
+            {"feature_name": "load_percentage", "feature_value": 85.1, "shap_value": 0.22},
+            {"feature_name": "voltage_lv", "feature_value": 410.2, "shap_value": -0.05},
+            {"feature_name": "current_a", "feature_value": 120.5, "shap_value": 0.10}
         ]
         
     explanations = db.query(ShapExplanation)\
