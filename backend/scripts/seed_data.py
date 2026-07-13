@@ -5,7 +5,7 @@ import random
 from datetime import datetime, date, timedelta
 
 # Add backend directory to sys.path so we can import from core and models
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy.orm import Session
 from core.database import SessionLocal, engine
