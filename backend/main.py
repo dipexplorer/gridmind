@@ -26,7 +26,7 @@ app = FastAPI(
 # Without this, browsers block cross-origin requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,   # List of allowed origins from .env
+    allow_origins=[origin.strip() for origin in settings.CORS_ORIGINS.split(",")] if isinstance(settings.CORS_ORIGINS, str) else settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],                    # GET, POST, PUT, PATCH, DELETE
     allow_headers=["*"],

@@ -49,8 +49,8 @@ class Settings(BaseSettings):
 
     # ─── API ──────────────────────────────────────────────────────────────────
     API_DEBUG: bool = False
-    # CORS_ORIGINS is a comma-separated string in .env, parsed into a list here
-    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    # CORS_ORIGINS is a comma-separated string in .env
+    CORS_ORIGINS: str = "*"
 
     # ─── File Uploads ─────────────────────────────────────────────────────────
     MAX_UPLOAD_SIZE_MB: int = 50
