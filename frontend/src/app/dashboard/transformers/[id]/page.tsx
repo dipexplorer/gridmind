@@ -133,21 +133,51 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
   const loadData = useCallback(async () => {
     try {
       const [detailRes] = await Promise.allSettled([apiClient.get(`/transformers/${id}/detail`)]);
-      if (detailRes.status === "fulfilled") setDetail(detailRes.value.data);
+      let detailData: DetailData | null = null;
+      if (detailRes.status === "fulfilled") {
+        detailData = detailRes.value.data;
+        setDetail(detailData);
+      }
 
-      const [ts, maint, shapR, riskR, weatherR] = await Promise.allSettled([
+      const [ts, maint, shapR, riskR] = await Promise.allSettled([
         apiClient.get(`/transformers/${id}/timeseries`),
         apiClient.get(`/transformers/${id}/maintenance`),
         apiClient.get(`/transformers/${id}/shap-explanations`),
         apiClient.get(`/transformers/${id}/risk-score`),
-        apiClient.get(`/transformers/${id}/weather-impact`),
       ]);
       if (ts.status === "fulfilled")    setTimeseries(ts.value.data);
       if (maint.status === "fulfilled") setMaintenance(maint.value.data);
       if (shapR.status === "fulfilled") setShap(shapR.value.data);
       if (riskR.status === "fulfilled") setRisk(riskR.value.data);
       else setRisk({ anomaly_score: 0, risk_category: "UNKNOWN", expected_lifetime_days: 0 });
-      if (weatherR.status === "fulfilled") setWeather(weatherR.value.data);
+
+      // ── Live Weather: Call Open-Meteo directly from frontend ─────────────────
+      // This is fully independent of backend — works even if Render is down.
+      // Parse lat/lon from "POINT(lon lat)" string from detail
+      try {
+        let lat = 26.14;  // Default: Guwahati, Assam
+        let lon = 91.74;
+        if (detailData?.location) {
+          const match = detailData.location.match(/POINT\(([\d.\-]+)\s+([\d.\-]+)\)/);
+          if (match) { lon = parseFloat(match[1]); lat = parseFloat(match[2]); }
+        }
+        const wRes = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`,
+          { signal: AbortSignal.timeout(4000) }
+        );
+        if (wRes.ok) {
+          const wJson = await wRes.json();
+          const ambientTemp: number = wJson?.current_weather?.temperature ?? 30.0;
+          const penalty = ambientTemp > 35.0 ? Math.min(15.0, (ambientTemp - 35.0) * 2.0) : 0.0;
+          setWeather({
+            ambient_temperature_c: ambientTemp,
+            weather_penalty_percentage: Math.round(penalty * 10) / 10,
+            is_hot_day: ambientTemp > 35.0,
+          });
+        }
+      } catch {
+        // Weather fetch failed silently — badge won't show, rest of page is fine
+      }
     } finally {
       setLoading(false);
     }
