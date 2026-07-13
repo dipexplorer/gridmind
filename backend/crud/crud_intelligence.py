@@ -11,25 +11,50 @@ def get_transformer_score(db: Session, transformer_id: str):
     transformer = db.query(Transformer).filter(Transformer.id == transformer_id).first()
     
     if transformer:
-        cat = "LOW"
-        if transformer.current_status == "critical":
+        # Convert raw probability (0.0–1.0) to percentage (0–100) for frontend display
+        raw_risk = float(transformer.current_failure_risk or 0.0)
+        anomaly_score_pct = round(raw_risk * 100, 1)
+        
+        # Map all possible status strings to frontend risk categories
+        status = (transformer.current_status or "").lower()
+        if status == "critical":
             cat = "CRITICAL"
-        elif transformer.current_status == "warning":
+            lifetime_days = 7
+        elif status == "warning":
             cat = "HIGH"
+            lifetime_days = 30
+        elif status == "normal":
+            # Further refine based on actual score
+            if anomaly_score_pct >= 70:
+                cat = "CRITICAL"
+                lifetime_days = 7
+            elif anomaly_score_pct >= 40:
+                cat = "HIGH"
+                lifetime_days = 30
+            elif anomaly_score_pct >= 20:
+                cat = "MEDIUM"
+                lifetime_days = 90
+            else:
+                cat = "LOW"
+                lifetime_days = 365
+        else:
+            cat = "LOW"
+            lifetime_days = 365
             
         import uuid
         return {
             "id": str(uuid.uuid4()),
             "transformer_id": transformer_id,
             "run_id": "00000000-0000-0000-0000-000000000000",
-            "anomaly_score": transformer.current_failure_risk or 0.0,
+            "anomaly_score": anomaly_score_pct,
             "risk_category": cat,
-            "expected_lifetime_days": 365 if cat == "LOW" else (30 if cat == "HIGH" else 7),
+            "expected_lifetime_days": lifetime_days,
             "confidence_interval_lower": 0,
-            "confidence_interval_upper": 1,
+            "confidence_interval_upper": 100,
             "calculated_at": transformer.last_updated or datetime.now(timezone.utc)
         }
     return None
+
 
 def get_shap_explanations(db: Session, score_id: str):
     return db.query(ShapExplanation).filter(ShapExplanation.score_id == score_id).all()
