@@ -62,6 +62,25 @@ class RealAIModel:
         else:
             logger.warning(f"Survival model not found at {survival_path}. Running in mock mode.")
 
+    def _fetch_live_weather(self, lat: float, lon: float) -> float:
+        """
+        Fetches live ambient temperature from Open-Meteo API.
+        Returns the temperature in Celsius, or 30.0 as fallback.
+        """
+        if not lat or not lon:
+            return 30.0
+        try:
+            import requests
+            url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
+            response = requests.get(url, timeout=3)
+            if response.status_code == 200:
+                data = response.json()
+                return float(data.get("current_weather", {}).get("temperature", 30.0))
+            return 30.0
+        except Exception as e:
+            logger.warning(f"Weather API failed: {e}. Using fallback ambient temperature.")
+            return 30.0
+
     def predict_anomaly(self, transformer_id: str) -> Dict[str, Any]:
         """
         Performs real Isolation Forest inference, SHAP calculation, and survival duration estimation.
@@ -104,6 +123,22 @@ class RealAIModel:
             # Normal data usually has raw_score > 0 (e.g. 0.1 to 0.3)
             # Anomalies have raw_score < 0
             anomaly_score = 35 - (raw_score * 200)
+
+            # LIVE WEATHER INTEGRATION (Phase 1)
+            # Fetch transformer coordinates to get ambient temperature
+            from models.asset import Transformer
+            transformer = db.query(Transformer).filter(Transformer.id == transformer_id).first()
+            lat = float(transformer.latitude) if transformer and transformer.latitude else 0.0
+            lon = float(transformer.longitude) if transformer and transformer.longitude else 0.0
+
+            ambient_temp = self._fetch_live_weather(lat, lon)
+            
+            # If ambient temp is very high (> 35C), it adds thermal stress to the transformer.
+            # Add up to 15% risk penalty.
+            if ambient_temp > 35.0:
+                heat_stress_penalty = min(15.0, (ambient_temp - 35.0) * 2.0)
+                anomaly_score += heat_stress_penalty
+
             # Clip between 0 and 100 to prevent database overflow
             anomaly_score = max(0.0, min(100.0, float(anomaly_score)))
 

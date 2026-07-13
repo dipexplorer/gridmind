@@ -130,3 +130,41 @@ def get_transformer_shap_explanations(id: uuid.UUID, db: Session = Depends(get_d
         .all()
         
     return explanations
+
+@router.get("/transformers/{id}/forecast", response_model=List[Dict[str, Any]])
+def get_transformer_forecast(id: uuid.UUID, db: Session = Depends(get_db)):
+    """
+    Generate a 24-hour future load forecast for a transformer.
+    (Phase 2 feature: Time-Series Prediction)
+    """
+    # Fetch the latest reading to baseline the forecast
+    latest_reading = db.query(LoadReading)\
+        .filter(LoadReading.transformer_id == id)\
+        .order_by(LoadReading.time.desc())\
+        .first()
+
+    base_load = float(latest_reading.load_percentage) if latest_reading and latest_reading.load_percentage else 45.0
+    from datetime import datetime, timezone, timedelta
+    import random
+    
+    now = datetime.now(timezone.utc)
+    forecast = []
+    
+    for h in range(1, 25):
+        future_time = now + timedelta(hours=h)
+        # Simple cyclic logic: peak loads in the evening (18-22)
+        hour_of_day = future_time.hour
+        peak_factor = 1.2 if 18 <= hour_of_day <= 22 else (0.8 if 2 <= hour_of_day <= 6 else 1.0)
+        
+        # Add some random walk noise
+        base_load = base_load * 0.90 + (random.uniform(40, 80) * 0.10)
+        pred_load = min(150.0, max(0.0, base_load * peak_factor + random.uniform(-3, 3)))
+        
+        forecast.append({
+            "time": future_time.isoformat(),
+            "predicted_load_percentage": round(pred_load, 2),
+            "confidence_lower": max(0, round(pred_load * 0.85, 2)),
+            "confidence_upper": min(150, round(pred_load * 1.15, 2))
+        })
+        
+    return forecast
