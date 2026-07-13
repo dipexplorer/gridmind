@@ -1,0 +1,43 @@
+name: GridMind Data Pipeline
+on:
+  schedule:
+    - cron: '0 * * * *' # Runs at the start of every hour
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          cd data-pipeline
+          pip install -r requirements.txt
+
+      - name: Fetch Live Weather
+        run: |
+          cd data-pipeline
+          python fetch_weather.py
+
+      - name: Run Digital Twin Engine
+        run: |
+          cd data-pipeline
+          python digital_twin_engine.py
+
+      - name: Sync to Supabase Database
+        env:
+          POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_PORT: 5432
+        run: |
+          cd data-pipeline
+          python supabase_sync.py
