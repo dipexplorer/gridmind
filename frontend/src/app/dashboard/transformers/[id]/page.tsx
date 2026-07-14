@@ -504,16 +504,17 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                 <div className="relative w-32 h-32 flex-shrink-0">
                   <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90">
                     <circle cx="60" cy="60" r="50" fill="none" stroke="#F1F5F9" strokeWidth="12" />
-                    {/* Base score arc (grey-blue) */}
-                    {weather && weather.weather_penalty_percentage > 0 && (
-                      <circle cx="60" cy="60" r="50" fill="none" stroke="#93C5FD" strokeWidth="12"
-                        strokeDasharray={`${2 * Math.PI * 50 * Math.max(0, (risk?.anomaly_score ?? 0) - weather.weather_penalty_percentage) / 100} ${2 * Math.PI * 50}`}
-                        strokeLinecap="round" />
-                    )}
-                    {/* Total score arc */}
+                    {/* Total score arc (rendered FIRST so it sits underneath) */}
                     <circle cx="60" cy="60" r="50" fill="none" stroke={scoreColor} strokeWidth="12"
                       strokeDasharray={`${2 * Math.PI * 50 * (risk?.anomaly_score ?? 0) / 100} ${2 * Math.PI * 50}`}
                       strokeLinecap="round" className="transition-all duration-1000 ease-out" />
+                      
+                    {/* Base score arc (blue) - rendered SECOND so it sits on top of the red arc */}
+                    {weather && weather.weather_penalty_percentage > 0 && (
+                      <circle cx="60" cy="60" r="50" fill="none" stroke="#60A5FA" strokeWidth="12"
+                        strokeDasharray={`${2 * Math.PI * 50 * Math.max(0, (risk?.anomaly_score ?? 0) - weather.weather_penalty_percentage) / 100} ${2 * Math.PI * 50}`}
+                        strokeLinecap="round" className="transition-all duration-1000 ease-out" />
+                    )}
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center rotate-0">
                     <span className="text-2xl font-black" style={{ color: scoreColor }}>{(risk?.anomaly_score ?? 0).toFixed(0)}</span>
