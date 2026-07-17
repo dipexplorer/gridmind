@@ -92,3 +92,4 @@ docker-compose.override.yml
 uploads/
 data/
 data/APDCL/
+presentation/
