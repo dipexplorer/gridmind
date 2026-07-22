@@ -6,5 +6,17 @@ numpy==1.26.4
 pandas==2.2.1
 joblib==1.4.0                  # Model serialization (.pkl files)
 
+# ─── Deep Learning ─────────────────────────────────────────────────────────────
+torch==2.2.2                   # PyTorch — LSTM & 1D-CNN time-series models
+xgboost==2.0.3                 # XGBoost — supervised classification benchmarking
+
+# ─── Reinforcement Learning ────────────────────────────────────────────────────
+gymnasium==0.29.1              # OpenAI Gym-style RL environment framework
+stable-baselines3==2.3.2       # PPO & Q-Learning RL algorithms
+
+# ─── Visualization ─────────────────────────────────────────────────────────────
+matplotlib==3.8.4              # ROC-AUC curves, confusion matrix plots
+seaborn==0.13.2                # Heatmaps, distribution plots
+
 # ─── Data Generation (dev/demo only) ──────────────────────────────────────────
 faker==24.4.0                  # Synthetic data generation

@@ -59,3 +59,8 @@ from api.endpoints import websockets
 
 app.include_router(websockets.router, prefix="/api/v1/ws", tags=["WebSockets"])
 app.include_router(api_router, prefix="/api/v1")
+
+# ─── ML Analytics Suite (Public — No Auth required for academic demo) ──────────
+from api.api import ml_public_router
+app.include_router(ml_public_router, prefix="/api/v1")
+

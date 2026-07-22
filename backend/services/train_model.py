@@ -3,7 +3,6 @@ import sys
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import IsolationForest
-import numpy as np
 import scipy.integrate
 # Monkey patch trapz for newer scipy compatibility with lifelines
 if not hasattr(scipy.integrate, 'trapz'):
