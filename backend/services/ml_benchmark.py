@@ -145,12 +145,11 @@ def get_benchmark_models() -> dict:
 
     if XGBOOST_AVAILABLE:
         models["XGBoost"] = XGBClassifier(
-            n_estimators=300,       # 300 boosting rounds
+            n_estimators=200,       # 200 boosting rounds (faster than 300)
             learning_rate=0.05,     # Small step size prevents overfitting
             max_depth=6,            # Maximum tree depth per round
             subsample=0.8,          # Row sampling per tree
             colsample_bytree=0.8,   # Feature sampling per tree
-            use_label_encoder=False,
             eval_metric="mlogloss", # Multi-class log loss
             random_state=42,
             n_jobs=-1

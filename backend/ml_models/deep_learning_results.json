@@ -1,0 +1,30 @@
+{
+  "lstm": {
+    "model": "LSTM Forecaster",
+    "architecture": "2-layer Stacked LSTM + FC Decoder",
+    "input": "24-hour sequence [temp, load, voltage, current]",
+    "output": "Next 24-hour [load, temperature] forecast",
+    "optimizer": "Adam",
+    "learning_rate": 0.001,
+    "loss_function": "MSE (Mean Squared Error)",
+    "epochs_trained": 50,
+    "final_val_loss": 0.013517
+  },
+  "cnn1d": {
+    "model": "1D-CNN Fault Classifier",
+    "architecture": "3x Conv1d blocks + FC Classifier",
+    "input": "24-hour waveform [4 channels x 24 time steps]",
+    "output": "Fault Class: NORMAL, THERMAL_SURGE, VOLTAGE_DIP, OVERLOAD",
+    "classes": [
+      "NORMAL",
+      "THERMAL_SURGE",
+      "VOLTAGE_DIP",
+      "OVERLOAD"
+    ],
+    "optimizer": "Adam",
+    "learning_rate": 0.001,
+    "loss_function": "CrossEntropyLoss",
+    "epochs_trained": 40,
+    "best_val_accuracy": 1.0
+  }
+}

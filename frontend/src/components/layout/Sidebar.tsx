@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, Zap, Map, Settings, LifeBuoy, LogOut } from 'lucide-react';
+import { LayoutDashboard, Zap, Map, Settings, LifeBuoy, LogOut, Brain } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -10,6 +10,7 @@ export default function Sidebar() {
 
   const navItems = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+    { name: 'AI Analytics', path: '/ml-analytics', icon: Brain },
     // { name: 'Assets', path: '/assets', icon: Zap }, // Temporarily disabled until implemented
     // { name: 'Map View', path: '/map', icon: Map },
     // { name: 'Settings', path: '/settings', icon: Settings },
