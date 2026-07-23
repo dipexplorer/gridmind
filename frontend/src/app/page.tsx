@@ -11,10 +11,7 @@ export default function Home() {
 
   useEffect(() => {
     setMounted(true);
-    
-    // DEV OVERRIDE: Automatically redirect to dashboard to bypass login page
-    router.push('/dashboard');
-  }, [router]);
+  }, []);
 
   if (!mounted) return null;
 
@@ -67,7 +64,7 @@ export default function Home() {
           </div>
 
           <Link 
-            href="/login"
+            href="/dashboard"
             className="group relative flex items-center justify-center gap-3 w-full bg-blue-600 text-white px-6 py-4 rounded-xl font-bold text-sm hover:bg-blue-700 transition-all active:scale-[0.98] shadow-md shadow-blue-500/20"
           >
             <Lock size={16} className="text-white/80" />
