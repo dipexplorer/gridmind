@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
 import { Loader2 } from 'lucide-react';
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -11,39 +10,9 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error || !session) {
-          if (pathname !== '/login') {
-            router.push('/login');
-          }
-        }
-      } catch (err) {
-        console.error('Error checking auth session:', err);
-        router.push('/login');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    checkAuth();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (event === 'SIGNED_OUT' || !session) {
-          if (pathname !== '/login') {
-            router.push('/login');
-          }
-        }
-      }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    // DEV OVERRIDE: Authentication bypassed as requested.
+    // Future restoration: Check git history or uncomment original supabase auth checks.
+    setIsLoading(false);
   }, [router, pathname]);
 
   if (isLoading) {

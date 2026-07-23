@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
 import { ShieldAlert, Lock, Zap, ArrowRight, Server, Activity } from "lucide-react";
 
 export default function Home() {
@@ -13,14 +12,8 @@ export default function Home() {
   useEffect(() => {
     setMounted(true);
     
-    // Automatically redirect to dashboard if already logged in
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        router.push('/dashboard');
-      }
-    };
-    checkSession();
+    // DEV OVERRIDE: Automatically redirect to dashboard to bypass login page
+    router.push('/dashboard');
   }, [router]);
 
   if (!mounted) return null;
