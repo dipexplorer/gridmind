@@ -32,9 +32,7 @@ interface WeatherImpact { ambient_temperature_c: number; weather_penalty_percent
 
 const RISK_META: Record<string, { color: string; bg: string; border: string; glow: string; label: string }> = {
   CRITICAL: { color: "text-red-700",     bg: "bg-red-500",     border: "border-red-200",    glow: "shadow-red-500/30",    label: "CRITICAL" },
-  HIGH:     { color: "text-amber-700",   bg: "bg-amber-400",   border: "border-amber-200",  glow: "shadow-amber-500/30",  label: "HIGH" },
-  MEDIUM:   { color: "text-blue-700",    bg: "bg-blue-500",    border: "border-blue-200",   glow: "shadow-blue-500/30",   label: "MEDIUM" },
-  LOW:      { color: "text-emerald-700", bg: "bg-emerald-500", border: "border-emerald-200",glow: "shadow-emerald-500/30",label: "LOW" },
+  WARNING:  { color: "text-amber-700",   bg: "bg-amber-400",   border: "border-amber-200",  glow: "shadow-amber-500/30",  label: "WARNING" },
   HEALTHY:  { color: "text-emerald-700", bg: "bg-emerald-500", border: "border-emerald-200",glow: "shadow-emerald-500/30",label: "HEALTHY" },
   UNKNOWN:  { color: "text-slate-500",   bg: "bg-slate-400",   border: "border-slate-200",  glow: "shadow-slate-200",     label: "UNKNOWN" },
 };
@@ -264,8 +262,8 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
 
   // Risk score color for gauge
   const scoreColor =
-    (risk?.anomaly_score ?? 0) >= 70 ? "#ef4444" :
-    (risk?.anomaly_score ?? 0) >= 40 ? "#f59e0b" : "#10b981";
+    (risk?.anomaly_score ?? 0) >= 90 ? "#ef4444" :
+    (risk?.anomaly_score ?? 0) >= 70 ? "#f59e0b" : "#10b981";
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -293,7 +291,7 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
               <div className={`relative w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg ${riskMeta.glow} flex-shrink-0`}
                 style={{ background: `linear-gradient(135deg, ${scoreColor}22, ${scoreColor}44)`, border: `2px solid ${scoreColor}33` }}>
                 <Zap size={26} style={{ color: scoreColor }} />
-                {(risk?.risk_category === "CRITICAL" || risk?.risk_category === "HIGH") && (
+                {(risk?.risk_category === "CRITICAL" || risk?.risk_category === "WARNING") && (
                   <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 border-2 border-white animate-pulse" />
                 )}
               </div>
@@ -524,10 +522,9 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                 {/* Tier explanations */}
                 <div className="flex-1 space-y-2.5">
                   {[
-                    { tier: "CRITICAL", range: "70–100", color: "bg-red-500",    active: (risk?.anomaly_score ?? 0) >= 70 },
-                    { tier: "HIGH",     range: "40–69",  color: "bg-amber-400",  active: (risk?.anomaly_score ?? 0) >= 40 && (risk?.anomaly_score ?? 0) < 70 },
-                    { tier: "MEDIUM",   range: "20–39",  color: "bg-blue-500",   active: (risk?.anomaly_score ?? 0) >= 20 && (risk?.anomaly_score ?? 0) < 40 },
-                    { tier: "LOW",      range: "0–19",   color: "bg-emerald-500",active: (risk?.anomaly_score ?? 0) < 20 },
+                    { tier: "CRITICAL", range: "90–100", color: "bg-red-500",    active: (risk?.anomaly_score ?? 0) >= 90 },
+                    { tier: "WARNING",  range: "70–89",  color: "bg-amber-400",  active: (risk?.anomaly_score ?? 0) >= 70 && (risk?.anomaly_score ?? 0) < 90 },
+                    { tier: "HEALTHY",  range: "0–69",   color: "bg-emerald-500",active: (risk?.anomaly_score ?? 0) < 70 },
                   ].map(r => (
                     <div key={r.tier} className={`flex items-center gap-3 py-2 px-3 rounded-xl transition-all ${r.active ? "bg-slate-50 ring-1 ring-slate-200" : "opacity-40"}`}>
                       <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${r.color}`} />

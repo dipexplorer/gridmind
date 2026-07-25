@@ -22,6 +22,8 @@ export default function TicketsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
   
   // Modal State
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
@@ -92,6 +94,14 @@ export default function TicketsPage() {
     .filter(t => filter === "ALL" ? true : t.status === filter)
     .filter(t => t.description?.toLowerCase().includes(searchTerm.toLowerCase()) || t.transformer_id.toLowerCase().includes(searchTerm.toLowerCase()));
 
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter, searchTerm]);
+
+  const totalPages = Math.ceil(filteredTickets.length / itemsPerPage);
+  const paginatedTickets = filteredTickets.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -155,7 +165,7 @@ export default function TicketsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 text-sm">
-                {filteredTickets.map(t => (
+                {paginatedTickets.map(t => (
                   <tr key={t.id} className="hover:bg-slate-50/50 transition-colors group">
                     <td className="py-4 px-2">
                       <div className="font-bold text-slate-800 font-mono text-xs">{t.id.substring(0, 8)}</div>
@@ -163,15 +173,15 @@ export default function TicketsPage() {
                     </td>
                     <td className="py-4 px-2">
                       <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded flex items-center gap-1 w-fit ${
-                        t.priority === 'CRITICAL' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
+                        t.priority === 'CRITICAL' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-amber-50 text-amber-600 border border-amber-200'
                       }`}>
                         {t.priority === 'CRITICAL' ? <ShieldAlert size={10} /> : <Wrench size={10} />}
-                        {t.priority}
+                        {t.priority === 'HIGH' ? 'WARNING' : t.priority}
                       </span>
                     </td>
                     <td className="py-4 px-2">
                       <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded w-fit ${
-                        t.status === 'RESOLVED' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'
+                        t.status === 'RESOLVED' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-blue-50 text-blue-600 border border-blue-200'
                       }`}>
                         {t.status}
                       </span>
@@ -189,7 +199,7 @@ export default function TicketsPage() {
                       {t.status === 'OPEN' ? (
                         <button 
                           onClick={() => setSelectedTicket(t)}
-                          className="text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg shadow-sm transition-colors"
+                          className="text-[11px] font-bold text-white bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg shadow-sm transition-colors"
                         >
                           Resolve
                         </button>
@@ -203,6 +213,34 @@ export default function TicketsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        
+        {/* Pagination Controls */}
+        {!loading && totalPages > 1 && (
+          <div className="flex justify-between items-center mt-6 pt-6 border-t border-slate-100">
+            <span className="text-xs font-medium text-slate-500">
+              Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredTickets.length)} of {filteredTickets.length} tickets
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                Previous
+              </button>
+              <span className="text-xs font-bold text-slate-700 px-3 py-1.5 bg-slate-50 rounded-lg">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                Next
+              </button>
+            </div>
           </div>
         )}
       </BentoCard>

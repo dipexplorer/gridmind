@@ -113,80 +113,7 @@ class LSTMForecaster(nn.Module):
         return out.view(-1, self.forecast_horizon, self.output_size)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# MODEL 2: 1D-CNN — Fault Waveform Classification
-# ═══════════════════════════════════════════════════════════════════════════════
 
-class CNN1DFaultClassifier(nn.Module):
-    """
-    PyTorch 1D-CNN model for fault pattern classification on time-series data.
-
-    Architecture:
-    ─────────────────────────────────────────────────────
-    Input  [batch, input_size=4, seq_len=24]  ← Note: channels first for Conv1d
-        → Conv1d(4 → 32, kernel=3, padding=1)
-        → BatchNorm + ReLU + MaxPool
-        → Conv1d(32 → 64, kernel=3, padding=1)
-        → BatchNorm + ReLU + MaxPool
-        → Conv1d(64 → 128, kernel=3, padding=1)
-        → BatchNorm + ReLU + AdaptiveAvgPool (reduces to length 1)
-        → Flatten → [batch, 128]
-        → Dropout → FC(128 → 64) → ReLU → FC(64 → num_classes=4)
-    Output [batch, 4]  ← Logits for 4 fault classes (use Softmax for proba)
-    ─────────────────────────────────────────────────────
-
-    Why kernel_size=3?
-      - A kernel of 3 looks at 3 consecutive time steps.
-      - Small kernels capture local temporal patterns (e.g., sudden spikes).
-      - Multiple stacked Conv layers capture increasingly complex patterns.
-
-    Why BatchNorm after each Conv?
-      - Normalizes the activations of each layer to prevent internal covariate shift.
-      - Allows higher learning rates and makes training much more stable.
-    """
-
-    def __init__(self, input_channels: int = 4, seq_len: int = 24, num_classes: int = 4):
-        super(CNN1DFaultClassifier, self).__init__()
-
-        self.num_classes = num_classes
-
-        # Convolutional feature extractor
-        self.conv_block = nn.Sequential(
-            # Block 1: Local pattern extraction
-            nn.Conv1d(input_channels, 32, kernel_size=3, padding=1),
-            nn.BatchNorm1d(32),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2),    # Halves temporal resolution
-
-            # Block 2: Higher-level pattern
-            nn.Conv1d(32, 64, kernel_size=3, padding=1),
-            nn.BatchNorm1d(64),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2),
-
-            # Block 3: Abstract temporal features
-            nn.Conv1d(64, 128, kernel_size=3, padding=1),
-            nn.BatchNorm1d(128),
-            nn.ReLU(),
-            nn.AdaptiveAvgPool1d(1),        # Squeeze temporal dim to 1
-        )
-
-        # Classification head
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Dropout(0.3),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Linear(64, num_classes)
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        x: [batch, channels, seq_len] e.g. [32, 4, 24]
-        Returns: logits [batch, num_classes]
-        """
-        features = self.conv_block(x)  # [batch, 128, 1]
-        return self.classifier(features)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -243,56 +170,6 @@ def generate_lstm_sequences(n_sequences: int = 2000, seq_len: int = 24,
     return np.array(X_seqs, dtype=np.float32), np.array(y_seqs, dtype=np.float32)
 
 
-def generate_cnn_fault_sequences(n_sequences: int = 3000, seq_len: int = 24,
-                                  random_state: int = 42) -> tuple:
-    """
-    Generates labeled fault classification sequences for 1D-CNN training.
-
-    Classes:
-      0 = NORMAL       — Standard operation
-      1 = THERMAL_SURGE — Sudden temperature spike mid-sequence
-      2 = VOLTAGE_DIP  — Voltage drop event
-      3 = OVERLOAD     — Load exceeds 110% for sustained period
-    """
-    np.random.seed(random_state)
-
-    class_names = ["NORMAL", "THERMAL_SURGE", "VOLTAGE_DIP", "OVERLOAD"]
-    X_seqs, y_labels = [], []
-
-    for i in range(n_sequences):
-        fault_class = i % 4  # Balanced classes: 25% each
-
-        # Base telemetry
-        temp    = np.random.uniform(40, 70, seq_len)
-        load    = np.random.uniform(30, 75, seq_len)
-        voltage = np.random.uniform(400, 420, seq_len)
-        current = np.random.uniform(50, 150, seq_len)
-
-        # Inject fault signatures
-        fault_start = np.random.randint(8, 16)  # Fault happens mid-sequence
-
-        if fault_class == 1:  # THERMAL_SURGE
-            temp[fault_start:] += np.random.uniform(25, 45)
-        elif fault_class == 2:  # VOLTAGE_DIP
-            voltage[fault_start:] -= np.random.uniform(30, 60)
-            current[fault_start:] += np.random.uniform(50, 120)
-        elif fault_class == 3:  # OVERLOAD
-            load[fault_start:] = np.random.uniform(112, 140)
-            current[fault_start:] += np.random.uniform(80, 180)
-
-        # Add noise to all classes
-        temp    += np.random.normal(0, 1.5, seq_len)
-        load    += np.random.normal(0, 2.0, seq_len)
-        voltage += np.random.normal(0, 1.5, seq_len)
-        current += np.random.normal(0, 5.0, seq_len)
-
-        # Shape: [channels=4, seq_len=24] for Conv1d
-        seq = np.row_stack([temp, load, voltage, current]).astype(np.float32)
-
-        X_seqs.append(seq)
-        y_labels.append(fault_class)
-
-    return np.array(X_seqs), np.array(y_labels), class_names
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -400,97 +277,13 @@ def train_lstm(save_path: str = "ml_models/lstm_forecaster.pt",
     }
 
 
-def train_cnn1d(save_path: str = "ml_models/cnn1d_fault_classifier.pt",
-                epochs: int = 40, batch_size: int = 64,
-                learning_rate: float = 0.001) -> dict:
-    """
-    Trains the 1D-CNN fault classifier.
-
-    Optimizer: Adam
-    Loss: CrossEntropyLoss (standard for multi-class classification)
-    """
-    logger.info("=== Training 1D-CNN Fault Classifier ===")
-
-    X, y, class_names = generate_cnn_fault_sequences(n_sequences=3000)
-
-    split   = int(len(X) * 0.8)
-    X_train, X_val = X[:split], X[split:]
-    y_train, y_val = y[:split], y[split:]
-
-    train_ds = TensorDataset(torch.tensor(X_train), torch.tensor(y_train, dtype=torch.long))
-    val_ds   = TensorDataset(torch.tensor(X_val),   torch.tensor(y_val,   dtype=torch.long))
-    train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
-    val_dl   = DataLoader(val_ds,   batch_size=batch_size)
-
-    model     = CNN1DFaultClassifier(num_classes=len(class_names)).to(DEVICE)
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    criterion = nn.CrossEntropyLoss()
-
-    best_val_acc = 0.0
-    history      = {"train_loss": [], "val_accuracy": []}
-
-    for epoch in range(epochs):
-        # Training
-        model.train()
-        train_loss = 0.0
-        for X_batch, y_batch in train_dl:
-            X_batch, y_batch = X_batch.to(DEVICE), y_batch.to(DEVICE)
-            optimizer.zero_grad()
-            logits = model(X_batch)
-            loss   = criterion(logits, y_batch)
-            loss.backward()
-            optimizer.step()
-            train_loss += loss.item()
-
-        # Validation
-        model.eval()
-        correct, total = 0, 0
-        with torch.no_grad():
-            for X_batch, y_batch in val_dl:
-                X_batch, y_batch = X_batch.to(DEVICE), y_batch.to(DEVICE)
-                logits  = model(X_batch)
-                preds   = logits.argmax(dim=1)
-                correct += (preds == y_batch).sum().item()
-                total   += len(y_batch)
-
-        val_acc = correct / total
-        avg_loss = train_loss / len(train_dl)
-        history["train_loss"].append(round(avg_loss, 6))
-        history["val_accuracy"].append(round(val_acc, 4))
-
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            torch.save(model.state_dict(), save_path)  # Save best model
-
-        if (epoch + 1) % 10 == 0:
-            logger.info(f"  Epoch {epoch+1}/{epochs} | Loss: {avg_loss:.4f} | Val Acc: {val_acc:.4f}")
-
-    logger.info(f"=== 1D-CNN Training Complete. Best Val Accuracy: {best_val_acc:.4f} ===")
-    logger.info(f"Model saved to {save_path}")
-
-    return {
-        "model": "1D-CNN Fault Classifier",
-        "architecture": "3x Conv1d blocks + FC Classifier",
-        "input": "24-hour waveform [4 channels x 24 time steps]",
-        "output": "Fault Class: NORMAL, THERMAL_SURGE, VOLTAGE_DIP, OVERLOAD",
-        "classes": class_names,
-        "optimizer": "Adam",
-        "learning_rate": learning_rate,
-        "loss_function": "CrossEntropyLoss",
-        "epochs_trained": epochs,
-        "best_val_accuracy": round(best_val_acc, 4),
-        "history": history
-    }
-
-
-# ─── Run both training pipelines ──────────────────────────────────────────────
+# ─── Run LSTM training pipeline ──────────────────────────────────────────────
 def train_all_deep_learning_models() -> dict:
     """
-    Entry point: Trains both LSTM and 1D-CNN and saves results summary.
+    Entry point: Trains LSTM and saves results summary.
     """
     results = {}
     results["lstm"] = train_lstm()
-    results["cnn1d"] = train_cnn1d()
 
     os.makedirs("ml_models", exist_ok=True)
     with open("ml_models/deep_learning_results.json", "w") as f:
@@ -499,7 +292,7 @@ def train_all_deep_learning_models() -> dict:
                         for k, v in results.items()}
         json.dump(serializable, f, indent=2)
 
-    logger.info("=== All Deep Learning Models Trained and Saved ===")
+    logger.info("=== LSTM Deep Learning Model Trained and Saved ===")
     return results
 
 

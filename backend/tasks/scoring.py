@@ -43,7 +43,7 @@ def score_all_transformers(task_id: str = None):
                 shap_values=shap_values
             )
             
-            if prediction["risk_category"] in ["HIGH", "CRITICAL"]:
+            if prediction["risk_category"] in ["WARNING", "CRITICAL"]:
                 anomalies_detected += 1
                 # Create an Alert and Ticket in the Database automatically
                 from models.event import Alert, MaintenanceTicket

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap } from 'react-leaflet';
+import MarkerClusterGroup from 'react-leaflet-cluster';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import Link from 'next/link';
@@ -19,11 +20,9 @@ L.Icon.Default.mergeOptions({
 // Each risk category gets a colour-coded glowing pin.
 // CRITICAL pins also get a faster blink via CSS animation.
 const RISK_COLORS: Record<string, { pin: string; pulse: string; label: string }> = {
-  CRITICAL: { pin: '#ef4444', pulse: 'rgba(239,68,68,0.5)',  label: '#ef4444' },
-  HIGH:     { pin: '#f59e0b', pulse: 'rgba(245,158,11,0.45)', label: '#f59e0b' },
-  MEDIUM:   { pin: '#3b82f6', pulse: 'rgba(59,130,246,0.4)', label: '#3b82f6' },
-  LOW:      { pin: '#10b981', pulse: 'rgba(16,185,129,0.4)', label: '#10b981' },
-  HEALTHY:  { pin: '#10b981', pulse: 'rgba(16,185,129,0.4)', label: '#10b981' },
+  CRITICAL: { pin: '#ef4444', pulse: 'rgba(239,68,68,0.5)',   label: '#ef4444' },
+  WARNING:  { pin: '#f59e0b', pulse: 'rgba(245,158,11,0.45)', label: '#f59e0b' },
+  HEALTHY:  { pin: '#10b981', pulse: 'rgba(16,185,129,0.4)',  label: '#10b981' },
   UNKNOWN:  { pin: '#94a3b8', pulse: 'rgba(148,163,184,0.3)', label: '#94a3b8' },
 };
 
@@ -35,31 +34,17 @@ const makeIcon = (risk: string) => {
     : 'animation: normalPulse 2.4s ease-in-out infinite;';
 
   return L.divIcon({
-    className: '',
+    className: 'custom-transformer-marker',
     html: `
-      <style>
-        @keyframes criticalBlink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.3;transform:scale(1.35)} }
-        @keyframes normalPulse   { 0%,100%{opacity:.6;transform:scale(1)} 50%{opacity:.1;transform:scale(1.4)} }
-      </style>
-      <div style="position:relative;width:36px;height:44px;display:flex;align-items:flex-start;justify-content:center;">
-        <!-- Pulse ring -->
-        <div style="
-          position:absolute;top:2px;left:50%;transform:translateX(-50%);
-          width:30px;height:30px;border-radius:50%;
-          background:${c.pulse};
-          ${pulseAnim}
-        "></div>
-        <!-- Pin body -->
-        <svg width="36" height="44" viewBox="0 0 36 44" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M18 0C10.268 0 4 6.268 4 14c0 9.9 14 30 14 30s14-20.1 14-30C32 6.268 25.732 0 18 0z"
-            fill="${c.pin}" stroke="white" stroke-width="2"/>
-          <!-- Zap icon inside pin -->
-          <path d="M21 6l-6 8h5l-4 10 10-12h-5z" fill="white" opacity="0.95"/>
+      <div style="display:flex;align-items:center;justify-content:center;width:24px;height:34px;">
+        <svg width="24" height="34" viewBox="0 0 24 34" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 2px 2px rgba(0,0,0,0.3));">
+          <path d="M12 0C5.373 0 0 5.373 0 12c0 7.5 12 22 12 22s12-14.5 12-22C24 5.373 18.627 0 12 0z" fill="${c.pin}" stroke="white" stroke-width="2"/>
+          <circle cx="12" cy="12" r="4" fill="white" />
         </svg>
       </div>`,
-    iconSize:   [36, 44],
-    iconAnchor: [18, 44],
-    popupAnchor: [0, -44],
+    iconSize:   [24, 34],
+    iconAnchor: [12, 34],
+    popupAnchor: [0, -34],
   });
 };
 
@@ -98,11 +83,10 @@ const parseWKT = (wkt: string): [number, number] | null => {
 // ─── Legend Component ─────────────────────────────────────────────────────────
 function MapLegend() {
   const items = [
-    { risk: 'CRITICAL', label: 'Critical Risk' },
-    { risk: 'HIGH',     label: 'High Risk' },
-    { risk: 'MEDIUM',   label: 'Medium Risk' },
-    { risk: 'LOW',      label: 'Healthy / Low' },
-    { risk: 'UNKNOWN',  label: 'Unknown / No Data' },
+    { risk: 'CRITICAL', label: 'Critical — Immediate Action' },
+    { risk: 'WARNING',  label: 'Warning — Plan Maintenance' },
+    { risk: 'HEALTHY',  label: 'Healthy — No Action Needed' },
+    { risk: 'UNKNOWN',  label: 'Unknown — No Sensor Data' },
   ];
   return (
     <div className="absolute bottom-6 left-4 z-[1000] bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-100 p-4 min-w-[160px]">
@@ -226,7 +210,8 @@ export default function TransformerMap({ transformers, onMarkerClick, showSidePa
 
   // Stats for full-page header bar
   const criticalCount = transformers.filter(t => t.risk_category === 'CRITICAL').length;
-  const highCount     = transformers.filter(t => t.risk_category === 'HIGH').length;
+  const warningCount  = transformers.filter(t => t.risk_category === 'WARNING').length;
+  const healthyCount  = transformers.filter(t => t.risk_category === 'HEALTHY').length;
 
   return (
     <div className="relative w-full h-full overflow-hidden">
@@ -235,9 +220,11 @@ export default function TransformerMap({ transformers, onMarkerClick, showSidePa
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-100 px-5 py-2 flex items-center gap-5">
           <Stat color="#ef4444" label="Critical" value={criticalCount} blink />
           <div className="w-px h-5 bg-slate-200" />
-          <Stat color="#f59e0b" label="High Risk" value={highCount} />
+          <Stat color="#f59e0b" label="Warning" value={warningCount} />
           <div className="w-px h-5 bg-slate-200" />
-          <Stat color="#10b981" label="Total Assets" value={transformers.length} />
+          <Stat color="#10b981" label="Healthy" value={healthyCount} />
+          <div className="w-px h-5 bg-slate-200" />
+          <Stat color="#94a3b8" label="Total" value={transformers.length} />
         </div>
       )}
 

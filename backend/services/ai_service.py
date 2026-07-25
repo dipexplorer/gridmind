@@ -147,19 +147,13 @@ class RealAIModel:
             # Clip between 0 and 100 to prevent database overflow
             anomaly_score = max(0.0, min(100.0, float(anomaly_score)))
 
-            # Fetch dynamic thresholds from settings
-            from crud import crud_system
-            settings = crud_system.get_settings(db)
-
-            # Categorize Risk
-            if anomaly_score >= settings.critical_threshold:
+            # Categorize Risk — 3-Tier Traffic Light System (Static Thresholds)
+            if anomaly_score >= 90:
                 category = "CRITICAL"
-            elif anomaly_score >= settings.high_threshold:
-                category = "HIGH"
-            elif anomaly_score >= settings.medium_threshold:
-                category = "MEDIUM"
+            elif anomaly_score >= 70:
+                category = "WARNING"
             else:
-                category = "LOW"
+                category = "HEALTHY"
 
             # 4. Compute SHAP explainability
             # TreeExplainer calculates shapley values for the decision function
@@ -215,21 +209,12 @@ class RealAIModel:
         """
         base_score = random.uniform(10.0, 95.0)
         
-        from core.database import SessionLocal
-        from crud import crud_system
-        db = SessionLocal()
-        try:
-            settings = crud_system.get_settings(db)
-            if base_score >= settings.critical_threshold:
-                category = "CRITICAL"
-            elif base_score >= settings.high_threshold:
-                category = "HIGH"
-            elif base_score >= settings.medium_threshold:
-                category = "MEDIUM"
-            else:
-                category = "LOW"
-        finally:
-            db.close()
+        if base_score >= 90:
+            category = "CRITICAL"
+        elif base_score >= 70:
+            category = "WARNING"
+        else:
+            category = "HEALTHY"
             
         shap_values = []
         for feature in self.features:

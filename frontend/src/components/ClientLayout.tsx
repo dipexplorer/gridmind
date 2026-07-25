@@ -62,6 +62,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           <Link href="/map" className={`text-sm font-semibold transition-colors ${pathname === '/map' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-900'}`}>
             Network Map
           </Link>
+          <Link href="/ml-analytics" className={`text-sm font-semibold transition-colors ${pathname === '/ml-analytics' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-900'}`}>
+            AI Analytics
+          </Link>
           <Link href="/assets" className={`text-sm font-semibold transition-colors ${pathname === '/assets' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-900'}`}>
             Assets Directory
           </Link>

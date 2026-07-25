@@ -19,7 +19,7 @@ interface TransformerListWidgetProps {
 export function TransformerListWidget({ transformers }: TransformerListWidgetProps) {
   // Only show high and critical risk
   const riskyTransformers = transformers.filter(t => 
-    ['HIGH', 'CRITICAL'].includes(t.risk_category)
+    ['WARNING', 'CRITICAL'].includes(t.risk_category)
   );
 
   return (

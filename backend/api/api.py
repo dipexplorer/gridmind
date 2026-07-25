@@ -2,7 +2,9 @@ from fastapi import APIRouter, Depends
 from api.endpoints import asset, timeseries, event, intelligence, user, notification, detail, operations, ml_analytics
 from core.security import verify_supabase_token
 
-api_router = APIRouter(dependencies=[Depends(verify_supabase_token)])
+# DEV OVERRIDE: Bypassed authentication as requested.
+# To restore, change back to: api_router = APIRouter(dependencies=[Depends(verify_supabase_token)])
+api_router = APIRouter()
 api_router.include_router(asset.router, tags=["Assets"])
 api_router.include_router(detail.router, tags=["Asset Details"])
 api_router.include_router(timeseries.router, tags=["TimeSeries Data"])

@@ -21,7 +21,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
   
-  const [activeTab, setActiveTab] = useState<'ai' | 'notifications' | 'data' | 'system'>('ai');
+  const [activeTab, setActiveTab] = useState<'notifications' | 'data' | 'system'>('notifications');
 
   // Mocks for UI
   const [emailAlerts, setEmailAlerts] = useState(true);
@@ -29,47 +29,7 @@ export default function SettingsPage() {
   const [retention, setRetention] = useState("90");
   const [maintenanceMode, setMaintenanceMode] = useState(false);
 
-  useEffect(() => {
-    fetchSettings();
-  }, []);
 
-  const fetchSettings = async () => {
-    try {
-      setLoading(true);
-      const res = await apiClient.get("/operations/settings");
-      setSettings(res.data);
-    } catch (e) {
-      console.error("Failed to load settings:", e);
-      setMessage({ text: "Failed to load system settings. Please try again.", type: 'error' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSaveAI = async () => {
-    if (!settings) return;
-    if (settings.critical_threshold <= settings.high_threshold || settings.high_threshold <= settings.medium_threshold) {
-      setMessage({ text: "Invalid thresholds. Must be: Critical > High > Medium", type: 'error' });
-      return;
-    }
-
-    try {
-      setSaving(true);
-      setMessage(null);
-      await apiClient.put("/operations/settings", {
-        critical_threshold: settings.critical_threshold,
-        high_threshold: settings.high_threshold,
-        medium_threshold: settings.medium_threshold,
-      });
-      setMessage({ text: "AI Thresholds saved successfully!", type: 'success' });
-    } catch (e: any) {
-      console.error("Failed to save:", e);
-      setMessage({ text: e.response?.data?.detail || "Failed to save settings.", type: 'error' });
-    } finally {
-      setSaving(false);
-      setTimeout(() => setMessage(null), 5000);
-    }
-  };
 
   const handleSaveMock = () => {
     setSaving(true);
@@ -80,19 +40,7 @@ export default function SettingsPage() {
     }, 800);
   };
 
-  const handleChange = (key: keyof SystemSettings, value: number) => {
-    if (settings) {
-      setSettings({ ...settings, [key]: value });
-    }
-  };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <Loader2 className="animate-spin text-blue-500" size={32} />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -117,12 +65,7 @@ export default function SettingsPage() {
       <div className="flex flex-col lg:flex-row gap-8">
         {/* Sidebar */}
         <div className="w-full lg:w-64 shrink-0 space-y-2">
-          <button 
-            onClick={() => setActiveTab('ai')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'ai' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
-          >
-            <BrainCircuit size={18} /> AI Engine Parameters
-          </button>
+
           <button 
             onClick={() => setActiveTab('notifications')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'notifications' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
@@ -146,102 +89,7 @@ export default function SettingsPage() {
         {/* Content Area */}
         <div className="flex-1">
           
-          {/* TAB: AI Engine */}
-          {activeTab === 'ai' && settings && (
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-300">
-              <div className="p-6 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><Zap size={20} /></div>
-                  <div>
-                    <h2 className="text-lg font-bold text-slate-800">Dynamic Risk Thresholds</h2>
-                    <p className="text-sm text-slate-500">Tune the sensitivity of the AI prediction engine.</p>
-                  </div>
-                </div>
-              </div>
 
-              <div className="p-6 space-y-10">
-                {/* Critical Slider */}
-                <div>
-                  <div className="flex justify-between mb-2">
-                    <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full bg-red-500 shadow-sm shadow-red-500/50" />
-                      Critical Risk Threshold
-                    </label>
-                    <span className="text-sm font-black text-red-600 bg-red-50 px-2 py-0.5 rounded-lg border border-red-100">
-                      {settings.critical_threshold}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="1"
-                    value={settings.critical_threshold}
-                    onChange={(e) => handleChange("critical_threshold", parseInt(e.target.value))}
-                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-red-500"
-                  />
-                  <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
-                    <Info size={12} /> Scores above this will automatically generate an OPEN priority ticket.
-                  </p>
-                </div>
-
-                {/* High Slider */}
-                <div>
-                  <div className="flex justify-between mb-2">
-                    <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full bg-orange-500 shadow-sm shadow-orange-500/50" />
-                      High Risk Threshold
-                    </label>
-                    <span className="text-sm font-black text-orange-600 bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-100">
-                      {settings.high_threshold}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="1"
-                    value={settings.high_threshold}
-                    onChange={(e) => handleChange("high_threshold", parseInt(e.target.value))}
-                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
-                  />
-                </div>
-
-                {/* Medium Slider */}
-                <div>
-                  <div className="flex justify-between mb-2">
-                    <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full bg-amber-400 shadow-sm shadow-amber-400/50" />
-                      Medium Risk Threshold
-                    </label>
-                    <span className="text-sm font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-100">
-                      {settings.medium_threshold}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="1"
-                    value={settings.medium_threshold}
-                    onChange={(e) => handleChange("medium_threshold", parseInt(e.target.value))}
-                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-amber-500"
-                  />
-                </div>
-              </div>
-
-              <div className="p-6 bg-slate-50/80 border-t border-slate-100 flex justify-end">
-                <button
-                  onClick={handleSaveAI}
-                  disabled={saving}
-                  className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-                  Save AI Configuration
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* TAB: Notifications */}
           {activeTab === 'notifications' && (

@@ -47,27 +47,15 @@ async def get_benchmark_results():
 
 
 # ─── GET /ml/deep-learning ────────────────────────────────────────────────────
-@router.get("/deep-learning", summary="Get LSTM + 1D-CNN Training Results")
+@router.get("/deep-learning", summary="Get LSTM Training Results")
 async def get_deep_learning_results():
     """
-    Returns training results for PyTorch LSTM and 1D-CNN models:
+    Returns training results for PyTorch LSTM model:
     - Architecture details
     - Training loss history
-    - Final validation accuracy/loss
+    - Final validation loss
     """
     return _load_json("deep_learning_results.json")
-
-
-# ─── GET /ml/rl-agent ─────────────────────────────────────────────────────────
-@router.get("/rl-agent", summary="Get Reinforcement Learning Agent Results")
-async def get_rl_results():
-    """
-    Returns Q-Learning agent training results:
-    - Success rate (% of critical scenarios resolved)
-    - Average cumulative reward
-    - Hyperparameters (alpha, gamma, epsilon)
-    """
-    return _load_json("rl_results.json")
 
 
 # ─── GET /ml/summary ──────────────────────────────────────────────────────────
@@ -76,9 +64,8 @@ async def get_ml_summary():
     """
     Returns a combined summary of all ML models in the GridMind system:
     - Current production models (Isolation Forest + Cox PH)
-    - Academic benchmark suite (RF, XGBoost, KNN, LR, SVM)
-    - Deep Learning models (LSTM + 1D-CNN)
-    - RL Agent
+    - Supervised benchmark suite (Random Forest vs XGBoost)
+    - Deep Learning models (LSTM load forecasting)
     """
     summary = {
         "production_models": {
@@ -102,18 +89,11 @@ async def get_ml_summary():
         "benchmark_suite": {
             "status": "TRAINED" if os.path.exists(
                 os.path.join(ML_MODELS_DIR, "benchmark_results.json")) else "NOT_TRAINED",
-            "models": ["Random Forest", "XGBoost", "KNN", "Logistic Regression", "SVM"],
+            "models": ["Random Forest", "XGBoost"],
             "metrics": ["Accuracy", "Precision", "Recall", "F1-Score", "ROC-AUC"],
         },
         "deep_learning": {
             "lstm_trained":  os.path.exists(os.path.join(ML_MODELS_DIR, "lstm_forecaster.pt")),
-            "cnn1d_trained": os.path.exists(os.path.join(ML_MODELS_DIR, "cnn1d_fault_classifier.pt")),
-        },
-        "rl_agent": {
-            "status": "TRAINED" if os.path.exists(
-                os.path.join(ML_MODELS_DIR, "rl_agent.pkl")) else "NOT_TRAINED",
-            "algorithm": "Q-Learning (Tabular)",
-            "purpose": "Prescriptive load balancing"
         }
     }
     return summary
@@ -146,7 +126,7 @@ async def trigger_benchmark(background_tasks: BackgroundTasks):
 # ─── POST /ml/run-deep-learning ───────────────────────────────────────────────
 @router.post("/run-deep-learning", summary="Trigger Deep Learning Training (Background)")
 async def trigger_deep_learning(background_tasks: BackgroundTasks):
-    """Triggers LSTM + 1D-CNN training in background."""
+    """Triggers LSTM training in background."""
     def run_dl():
         try:
             logger.info("Background deep learning training triggered via API")
@@ -159,27 +139,6 @@ async def trigger_deep_learning(background_tasks: BackgroundTasks):
     background_tasks.add_task(run_dl)
     return {
         "status": "STARTED",
-        "message": "LSTM + 1D-CNN training started in background. "
-                   "Check GET /ml/deep-learning in ~2-5 minutes for results."
-    }
-
-
-# ─── POST /ml/run-rl-agent ────────────────────────────────────────────────────
-@router.post("/run-rl-agent", summary="Trigger RL Agent Training (Background)")
-async def trigger_rl_agent(background_tasks: BackgroundTasks):
-    """Triggers Q-Learning RL agent training in background."""
-    def run_rl():
-        try:
-            logger.info("Background RL agent training triggered via API")
-            from services.rl_agent import train_rl_agent
-            train_rl_agent()
-            logger.info("RL agent training completed successfully")
-        except Exception as e:
-            logger.error(f"RL agent training failed: {e}")
-
-    background_tasks.add_task(run_rl)
-    return {
-        "status": "STARTED",
-        "message": "RL agent training started. "
-                   "Check GET /ml/rl-agent in ~30 seconds for results."
+        "message": "LSTM training started in background. "
+                   "Check GET /ml/deep-learning in ~1-2 minutes for results."
     }

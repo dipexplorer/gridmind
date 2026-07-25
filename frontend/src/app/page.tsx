@@ -35,7 +35,7 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-slate-200 text-slate-500 text-[10px] font-extrabold tracking-widest uppercase shadow-sm">
             <Server size={10} />
-            Node: GHY-01
+            Node: APDCL-ALL
           </div>
         </div>
 
@@ -67,8 +67,8 @@ export default function Home() {
             href="/dashboard"
             className="group relative flex items-center justify-center gap-3 w-full bg-blue-600 text-white px-6 py-4 rounded-xl font-bold text-sm hover:bg-blue-700 transition-all active:scale-[0.98] shadow-md shadow-blue-500/20"
           >
-            <Lock size={16} className="text-white/80" />
-            Authenticate & Enter
+            <Zap size={16} className="text-white/80" />
+            Enter Dashboard
             <ArrowRight size={16} className="text-white/80 group-hover:translate-x-1 transition-transform" />
           </Link>
           

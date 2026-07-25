@@ -24,10 +24,7 @@ import numpy as np
 import pandas as pd
 
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.svm import SVC
-from sklearn.preprocessing import StandardScaler, label_binarize
+from sklearn.preprocessing import label_binarize
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score,
@@ -104,14 +101,7 @@ def generate_labeled_dataset(n_samples: int = 5000, random_state: int = 42) -> t
 
 def get_benchmark_models() -> dict:
     """
-    Returns a dictionary of 5 classifier instances for benchmarking.
-
-    Why these specific models?
-    - Random Forest:     Ensemble tree model; robust to outliers and noise.
-    - XGBoost:           State-of-the-art gradient boosting; highest accuracy on tabular data.
-    - KNN:               Distance-based; simple baseline for comparison.
-    - Logistic Reg.:     Linear classifier; interpretable baseline.
-    - SVM:               Maximum-margin classifier; strong on small feature sets.
+    Returns a dictionary of Random Forest and XGBoost classifiers for benchmarking.
     """
     models = {
         "Random Forest": RandomForestClassifier(
@@ -120,27 +110,7 @@ def get_benchmark_models() -> dict:
             class_weight="balanced",# Handle class imbalance (failures are rare)
             random_state=42,
             n_jobs=-1               # Use all CPU cores
-        ),
-        "Logistic Regression": LogisticRegression(
-            max_iter=1000,          # Increase iterations for convergence
-            C=1.0,                  # Regularization strength (1/lambda)
-            class_weight="balanced",
-            random_state=42,
-            multi_class="multinomial"
-        ),
-        "K-Nearest Neighbors": KNeighborsClassifier(
-            n_neighbors=7,          # K=7 — odd number to avoid ties
-            metric="euclidean",     # Straight-line distance in feature space
-            weights="distance"      # Closer neighbors have higher influence
-        ),
-        "SVM": SVC(
-            kernel="rbf",           # Radial Basis Function — non-linear boundary
-            C=1.0,                  # Regularization
-            gamma="scale",          # Kernel coefficient
-            class_weight="balanced",
-            probability=True,       # Required for ROC-AUC calculation
-            random_state=42
-        ),
+        )
     }
 
     if XGBOOST_AVAILABLE:
@@ -156,7 +126,7 @@ def get_benchmark_models() -> dict:
         )
     else:
         # Fallback: Gradient Boosting from sklearn if XGBoost not installed
-        models["GradientBoosting"] = GradientBoostingClassifier(
+        models["Gradient Boosting"] = GradientBoostingClassifier(
             n_estimators=200,
             learning_rate=0.05,
             max_depth=5,
@@ -170,18 +140,17 @@ def get_benchmark_models() -> dict:
 
 def run_benchmark(save_path: str = "ml_models/benchmark_results.json") -> dict:
     """
-    Runs the full 5-model benchmark pipeline:
+    Runs the Random Forest vs XGBoost benchmark pipeline:
       1. Generate labeled dataset.
       2. Split into train/test (80/20).
-      3. Scale features (required for KNN, LR, SVM).
-      4. Train each model.
-      5. Calculate all metrics.
-      6. Save results to JSON.
+      3. Train each model.
+      4. Calculate all metrics.
+      5. Save results to JSON.
 
     Returns:
         dict: Complete benchmark results with all metrics and ROC data.
     """
-    logger.info("=== GridMind Academic ML Benchmark Starting ===")
+    logger.info("=== GridMind ML Benchmark Starting ===")
 
     # Step 1: Generate data
     X, y, feature_names = generate_labeled_dataset(n_samples=5000)
@@ -192,19 +161,7 @@ def run_benchmark(save_path: str = "ml_models/benchmark_results.json") -> dict:
     )
     logger.info(f"Train: {len(X_train)} | Test: {len(X_test)}")
 
-    # Step 3: Feature scaling
-    # Why? KNN, SVM, and Logistic Regression are sensitive to feature scale.
-    # Temperature is 30-110, but Current can be 20-400. Without scaling,
-    # Current would dominate the distance calculations completely.
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled  = scaler.transform(X_test)  # Use SAME scaler — no data leakage!
-
-    # Save the scaler for API use
-    os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else "ml_models", exist_ok=True)
-    joblib.dump(scaler, "ml_models/benchmark_scaler.pkl")
-
-    # Step 4: Get models
+    # Step 3: Get models
     models = get_benchmark_models()
     class_names = ["SAFE", "WARNING", "CRITICAL"]
 
@@ -215,11 +172,8 @@ def run_benchmark(save_path: str = "ml_models/benchmark_results.json") -> dict:
     for model_name, model in models.items():
         logger.info(f"  Training {model_name}...")
 
-        # Some models need scaled data (distance/gradient based)
-        # Tree-based models (RF, XGBoost) do NOT need scaling
-        needs_scaling = model_name in ["Logistic Regression", "K-Nearest Neighbors", "SVM"]
-        Xtr = X_train_scaled if needs_scaling else X_train
-        Xte = X_test_scaled  if needs_scaling else X_test
+        Xtr = X_train
+        Xte = X_test
 
         # Train the model
         model.fit(Xtr, y_train)

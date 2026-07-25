@@ -33,14 +33,12 @@ interface AssetRow extends Transformer, Partial<RiskScore> {
 
 type SortKey = "transformer_code" | "rated_kva" | "anomaly_score" | "risk_category" | "operational_status";
 
-const RISK_ORDER: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, HEALTHY: 1, UNKNOWN: 0 };
+const RISK_ORDER: Record<string, number> = { CRITICAL: 3, WARNING: 2, HEALTHY: 1, UNKNOWN: 0 };
 
 const riskBadge = (r?: string) => {
   const map: Record<string, string> = {
     CRITICAL: "bg-red-100 text-red-700 border border-red-200",
-    HIGH:     "bg-amber-100 text-amber-700 border border-amber-200",
-    MEDIUM:   "bg-blue-100 text-blue-700 border border-blue-200",
-    LOW:      "bg-emerald-100 text-emerald-700 border border-emerald-200",
+    WARNING:  "bg-amber-100 text-amber-700 border border-amber-200",
     HEALTHY:  "bg-emerald-100 text-emerald-700 border border-emerald-200",
     UNKNOWN:  "bg-slate-100 text-slate-500 border border-slate-200",
   };
@@ -58,6 +56,10 @@ export default function AssetsPage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [sortKey, setSortKey]       = useState<SortKey>("risk_category");
   const [sortDir, setSortDir]       = useState<"asc" | "desc">("desc");
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -97,6 +99,11 @@ export default function AssetsPage() {
     else { setSortKey(key); setSortDir("desc"); }
   };
 
+  // Reset page when filters or sort change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, riskFilter, statusFilter, sortKey, sortDir]);
+
   // Derived filtered + sorted list
   const displayed = assets
     .filter(a => {
@@ -116,10 +123,14 @@ export default function AssetsPage() {
       return sortDir === "asc" ? diff : -diff;
     });
 
+  const totalPages = Math.ceil(displayed.length / itemsPerPage);
+  const paginatedData = displayed.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   // Stats
   const critical = assets.filter(a => a.risk_category === "CRITICAL").length;
-  const high     = assets.filter(a => a.risk_category === "HIGH").length;
-  const healthy  = assets.filter(a => a.risk_category === "LOW" || a.risk_category === "HEALTHY").length;
+  const warning  = assets.filter(a => a.risk_category === "WARNING").length;
+  const healthy  = assets.filter(a => a.risk_category === "HEALTHY").length;
+  const unknown  = assets.filter(a => a.risk_category === "UNKNOWN" || !a.risk_category).length;
 
   const SortIcon = ({ k }: { k: SortKey }) =>
     sortKey === k
@@ -212,13 +223,14 @@ export default function AssetsPage() {
           </div>
 
           {/* Stat pills */}
-          <div className="flex items-center gap-4 mt-5 flex-wrap">
+          <div className="flex items-center gap-3 mt-5 flex-wrap">
             {[
-              { label: "Critical", value: critical, color: "text-red-700 bg-red-50 border-red-200", icon: "🔴" },
-              { label: "High Risk", value: high,     color: "text-amber-700 bg-amber-50 border-amber-200", icon: "🟡" },
-              { label: "Healthy",  value: healthy,   color: "text-emerald-700 bg-emerald-50 border-emerald-200", icon: "🟢" },
-              { label: "Total",    value: assets.length, color: "text-blue-700 bg-blue-50 border-blue-200", icon: "📊" },
-            ].map(s => (
+              { label: "Critical", value: critical, color: "text-red-700 bg-red-50 border-red-200",      icon: "🔴" },
+              { label: "Warning",  value: warning,  color: "text-amber-700 bg-amber-50 border-amber-200", icon: "🟡" },
+              { label: "Healthy",  value: healthy,  color: "text-emerald-700 bg-emerald-50 border-emerald-200", icon: "🟢" },
+              { label: "Unknown",  value: unknown,  color: "text-slate-600 bg-slate-100 border-slate-200", icon: "⚪" },
+              { label: "Total",    value: assets.length, color: "text-slate-800 bg-white border-slate-300 shadow-sm", icon: "📊" },
+            ].filter(s => s.value > 0).map(s => (
               <div key={s.label} className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full border text-xs font-bold ${s.color}`}>
                 <span>{s.icon}</span>
                 <span>{s.label}: {s.value}</span>
@@ -249,11 +261,10 @@ export default function AssetsPage() {
               onChange={e => setRiskFilter(e.target.value)}
             >
               <option value="ALL">All Risk Levels</option>
-              <option value="CRITICAL">Critical</option>
-              <option value="HIGH">High</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="LOW">Low / Healthy</option>
-              <option value="UNKNOWN">Unknown</option>
+              <option value="CRITICAL">🔴 CRITICAL</option>
+              <option value="WARNING">🟡 WARNING</option>
+              <option value="HEALTHY">🟢 HEALTHY</option>
+              <option value="UNKNOWN">⚪ UNKNOWN</option>
             </select>
             <select
               className="text-sm bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:border-blue-400 transition-all"
@@ -313,7 +324,7 @@ export default function AssetsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {displayed.map((a) => (
+                {paginatedData.map((a) => (
                   <tr key={a.id} className="hover:bg-slate-50/80 transition-colors group">
                     <td className="px-5 py-4">
                       <span className="font-bold text-slate-800 text-sm">{a.transformer_code}</span>
@@ -330,7 +341,7 @@ export default function AssetsPage() {
                             className="h-full rounded-full transition-all"
                             style={{
                               width: `${Math.min(a.anomaly_score ?? 0, 100)}%`,
-                              background: a.risk_category === "CRITICAL" ? "#ef4444" : a.risk_category === "HIGH" ? "#f59e0b" : "#10b981"
+                              background: a.risk_category === "CRITICAL" ? "#ef4444" : a.risk_category === "WARNING" ? "#f59e0b" : a.risk_category === "UNKNOWN" ? "#94a3b8" : "#10b981"
                             }}
                           />
                         </div>
@@ -349,7 +360,7 @@ export default function AssetsPage() {
                     <td className="px-5 py-4 text-right">
                       <Link
                         href={`/dashboard/transformers/${a.id}`}
-                        className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors opacity-0 group-hover:opacity-100"
+                        className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-transparent hover:border-blue-200 px-3 py-1.5 rounded-lg transition-all"
                       >
                         Details <ArrowRight size={12} />
                       </Link>
@@ -358,8 +369,21 @@ export default function AssetsPage() {
                 ))}
               </tbody>
             </table>
-            <div className="px-5 py-3 border-t border-slate-50 bg-slate-50/50 text-xs text-slate-400 font-medium">
-              {displayed.length} assets shown · Click column headers to sort
+            <div className="px-5 py-3 border-t border-slate-50 bg-slate-50/50 flex items-center justify-between text-xs text-slate-400 font-medium">
+              <div>{displayed.length} assets found · Showing {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, displayed.length)}</div>
+              <div className="flex gap-2">
+                <button 
+                  disabled={currentPage === 1} 
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 text-slate-600 transition-colors"
+                >Prev</button>
+                <span className="px-2 py-1.5 flex items-center text-slate-500">Page {currentPage} of {totalPages || 1}</span>
+                <button 
+                  disabled={currentPage >= totalPages || totalPages === 0} 
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 text-slate-600 transition-colors"
+                >Next</button>
+              </div>
             </div>
           </div>
         )}

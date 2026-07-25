@@ -84,17 +84,21 @@ export default function Dashboard() {
       // 3. Map scores using data already returned by the main API to avoid N+1 requests
       const combined: CombinedData[] = transformers.map((t: any) => {
         const substation_name = t.substation_id ? subMap.get(t.substation_id) : "Unknown Substation";
-        let cat = "LOW";
-        if (t.current_status === "critical") cat = "CRITICAL";
-        else if (t.current_status === "warning" || t.current_status === "overloaded") cat = "HIGH";
+        const score = (t.current_failure_risk || 0) * 100;
+        let cat = "UNKNOWN";
+        if (t.current_failure_risk !== null && t.current_failure_risk !== undefined) {
+          if (score >= 90) cat = "CRITICAL";
+          else if (score >= 70) cat = "WARNING";
+          else cat = "HEALTHY";
+        }
         
         return {
           ...t,
           id: t.id,
           substation_name,
-          anomaly_score: (t.current_failure_risk || 0) * 100,
+          anomaly_score: score,
           risk_category: cat,
-          expected_lifetime_days: cat === "LOW" ? 365 : (cat === "HIGH" ? 30 : 7)
+          expected_lifetime_days: cat === "HEALTHY" ? 365 : (cat === "WARNING" ? 90 : 7)
         };
       });
       
@@ -105,7 +109,7 @@ export default function Dashboard() {
         // Enrich tickets with transformer names
         const enrichedTickets = tixRes.data.map((t: any) => {
           const matchingTr = transformers.find(tr => tr.id === t.transformer_id);
-          return { ...t, transformer_name: matchingTr?.name || t.transformer_id };
+          return { ...t, transformer_name: matchingTr?.transformer_code || t.transformer_id.substring(0, 8).toUpperCase() };
         });
         setTickets(enrichedTickets);
       } catch(e) {
@@ -167,18 +171,25 @@ export default function Dashboard() {
     return matchesSearch && matchesSubstation && matchesRisk && matchesCapacity && matchesStatus;
   });
 
-  // Compute stats based on filteredData
-  const healthyCount = filteredData.filter(d => d.risk_category === "LOW").length;
-  const mediumCount = filteredData.filter(d => d.risk_category === "MEDIUM").length;
-  const highCount = filteredData.filter(d => d.risk_category === "HIGH").length;
+  // Compute global stats for top KPI cards
+  const globalHealthyCount = data.filter(d => d.risk_category === "HEALTHY").length;
+  const globalWarningCount = data.filter(d => d.risk_category === "WARNING").length;
+  const globalCriticalCount = data.filter(d => d.risk_category === "CRITICAL").length;
+
+  // Compute stats based on filteredData for charts and lists
+  const healthyCount = filteredData.filter(d => d.risk_category === "HEALTHY").length;
+  const warningCount = filteredData.filter(d => d.risk_category === "WARNING").length;
   const criticalCount = filteredData.filter(d => d.risk_category === "CRITICAL").length;
+  const unknownCount = filteredData.filter(d => d.risk_category === "UNKNOWN").length;
   
   const riskChartData = [
-    { category: 'Healthy', count: healthyCount, color: '#10B981' },
-    { category: 'Medium', count: mediumCount, color: '#3B82F6' },
-    { category: 'High', count: highCount, color: '#F59E0B' },
-    { category: 'Critical', count: criticalCount, color: '#EF4444' }
+    { category: 'Healthy',  count: healthyCount,  color: '#10B981' },
+    { category: 'Warning',  count: warningCount,  color: '#F59E0B' },
+    { category: 'Critical', count: criticalCount, color: '#EF4444' },
   ];
+  if (unknownCount > 0) {
+    riskChartData.push({ category: 'Unknown', count: unknownCount, color: '#94A3B8' });
+  }
 
   const exportTicketsToCSV = () => {
     if (tickets.length === 0) return;
@@ -265,11 +276,10 @@ export default function Dashboard() {
             className="w-full bg-slate-50 border border-slate-100 hover:border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-700 focus:outline-none focus:border-primary focus:bg-white transition-all"
           >
             <option value="all">All Risk Levels</option>
-            <option value="LOW">LOW / HEALTHY</option>
-            <option value="MEDIUM">MEDIUM</option>
-            <option value="HIGH">HIGH</option>
-            <option value="CRITICAL">CRITICAL</option>
-            <option value="UNKNOWN">UNKNOWN</option>
+            <option value="CRITICAL">🔴 CRITICAL</option>
+            <option value="WARNING">🟡 WARNING</option>
+            <option value="HEALTHY">🟢 HEALTHY</option>
+            <option value="UNKNOWN">⚪ UNKNOWN</option>
           </select>
         </div>
 
@@ -314,10 +324,10 @@ export default function Dashboard() {
           </div>
           <div>
             <div className="text-4xl font-extrabold text-slate-900">
-              {filteredData.length > 0 ? Math.round((healthyCount / filteredData.length) * 100) : 0}%
+              {data.length > 0 ? Math.round((globalHealthyCount / data.length) * 100) : 0}%
             </div>
             <p className="text-xs text-emerald-600 font-semibold mt-1 flex items-center gap-1">
-              <span>●</span> Optimal State
+              <span>●</span> {globalHealthyCount} Healthy Assets
             </p>
           </div>
         </BentoCard>
@@ -329,9 +339,9 @@ export default function Dashboard() {
             <div className="p-2 bg-red-50 text-red-600 rounded-xl"><ShieldAlert size={20} /></div>
           </div>
           <div>
-            <div className="text-4xl font-extrabold text-slate-900">{highCount + criticalCount}</div>
+            <div className="text-4xl font-extrabold text-slate-900">{globalWarningCount + globalCriticalCount}</div>
             <p className="text-xs text-red-600 font-semibold mt-1 flex items-center gap-1">
-              <span>●</span> Requires attention
+              <span>●</span> {globalCriticalCount} Critical, {globalWarningCount} Warning
             </p>
           </div>
         </BentoCard>
@@ -343,7 +353,7 @@ export default function Dashboard() {
             <div className="p-2 bg-blue-50 text-blue-600 rounded-xl"><Database size={20} /></div>
           </div>
           <div>
-            <div className="text-4xl font-extrabold text-slate-900">{filteredData.length}</div>
+            <div className="text-4xl font-extrabold text-slate-900">{data.length}</div>
             <p className="text-xs text-slate-500 font-semibold mt-1">Guwahati Region</p>
           </div>
         </BentoCard>
@@ -402,11 +412,11 @@ export default function Dashboard() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 text-xs font-bold uppercase tracking-wider">
-                  <th className="pb-3">Asset Code</th>
-                  <th className="pb-3">Capacity</th>
-                  <th className="pb-3">Risk Tier</th>
-                  <th className="pb-3">Anomaly Score</th>
-                  <th className="pb-3 text-right">Action</th>
+                  <th className="pb-3 sticky top-0 bg-white z-10">Asset Code</th>
+                  <th className="pb-3 sticky top-0 bg-white z-10">Capacity</th>
+                  <th className="pb-3 sticky top-0 bg-white z-10">Risk Tier</th>
+                  <th className="pb-3 sticky top-0 bg-white z-10">Anomaly Score</th>
+                  <th className="pb-3 text-right sticky top-0 bg-white z-10">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
@@ -417,8 +427,8 @@ export default function Dashboard() {
                     <td className="py-3">
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                         tx.risk_category === 'CRITICAL' ? 'bg-red-50 text-red-700' : 
-                        tx.risk_category === 'HIGH' ? 'bg-amber-50 text-amber-700' : 
-                        tx.risk_category === 'MEDIUM' ? 'bg-blue-50 text-blue-700' :
+                        tx.risk_category === 'WARNING'  ? 'bg-amber-50 text-amber-700' : 
+                        tx.risk_category === 'UNKNOWN'  ? 'bg-slate-100 text-slate-500' :
                         'bg-emerald-50 text-emerald-700'
                       }`}>
                         {tx.risk_category}
