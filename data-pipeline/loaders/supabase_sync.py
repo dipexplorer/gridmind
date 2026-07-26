@@ -35,7 +35,7 @@ for r in records:
             RETURNING id
         """, (new_id, name_str, code_str, 33, dist))
         row = cur.fetchone()
-        substations[sub_code] = row[0]
+        substations[sub_code] = row[0] if row else new_id
 
 # 2. Upsert transformers with district, operational_status and substation_id
 for r in records:
