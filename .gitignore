@@ -93,3 +93,9 @@ uploads/
 data/
 data/APDCL/
 presentation/
+# Data pipeline generated outputs
+data-pipeline/output/*.csv
+data-pipeline/output/*.json
+
+# TypeScript build artifacts
+frontend/tsconfig.tsbuildinfo
