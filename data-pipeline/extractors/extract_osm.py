@@ -31,7 +31,7 @@ OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 
 ASSAM_BBOX = (24.0, 89.6, 28.2, 96.5)  # (south, west, north, east)
 
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
+OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
 
 # Overpass QL queries for each power feature type
 QUERIES = {

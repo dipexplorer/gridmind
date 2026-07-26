@@ -72,7 +72,7 @@ HOURLY_LOAD_FACTOR = [
 # Paths
 # ---------------------------------------------------------------------------
 
-OUTPUT_DIR   = os.path.join(os.path.dirname(__file__), "output")
+OUTPUT_DIR   = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
 INPUT_FILE   = os.path.join(OUTPUT_DIR, "transformers_with_weather.csv")
 OUTPUT_CSV   = os.path.join(OUTPUT_DIR, "digital_twin_snapshot.csv")
 OUTPUT_JSON  = os.path.join(OUTPUT_DIR, "digital_twin_snapshot.json")

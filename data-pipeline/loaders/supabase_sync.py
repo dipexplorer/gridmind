@@ -12,8 +12,10 @@ conn = psycopg2.connect(
 )
 conn.autocommit = True
 cur = conn.cursor()
+pipeline_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+snapshot_path = os.path.join(pipeline_dir, "output", "digital_twin_snapshot.json")
 
-with open("output/digital_twin_snapshot.json", "r") as f:
+with open(snapshot_path, "r") as f:
     records = json.load(f)
 
 # 1. Create mapping of Sub Div Code to Substation ID

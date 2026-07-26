@@ -30,8 +30,8 @@ import requests
 # Config
 # ---------------------------------------------------------------------------
 
-OUTPUT_DIR  = os.path.join(os.path.dirname(__file__), "output")
-PROJECT_DIR = os.path.dirname(os.path.dirname(__file__))
+OUTPUT_DIR  = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Priority: OSM-extracted first, fall back to manually-processed CSV
 INPUT_CANDIDATES = [
