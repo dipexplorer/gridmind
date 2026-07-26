@@ -55,7 +55,7 @@ fi
 # STEP 1: OSM Extraction (expensive — run daily, skip if --skip-osm)
 if [ "$SKIP_OSM" = false ]; then
   log "[STEP 1] OSM Extraction"
-  $PYTHON extract_osm.py >> "$LOG_FILE" 2>&1
+  $PYTHON extractors/extract_osm.py >> "$LOG_FILE" 2>&1
   log "[STEP 1] ✓ Done"
 else
   log "[STEP 1] Skipped (--skip-osm)"
@@ -68,17 +68,17 @@ fi
 
 # STEP 2: Weather Fetch
 log "[STEP 2] Live Weather Fetch"
-$PYTHON fetch_weather.py >> "$LOG_FILE" 2>&1
+$PYTHON extractors/fetch_weather.py >> "$LOG_FILE" 2>&1
 log "[STEP 2] ✓ Done"
 
 # STEP 3: Digital Twin Engine
 log "[STEP 3] Digital Twin Engine"
-$PYTHON digital_twin_engine.py >> "$LOG_FILE" 2>&1
+$PYTHON transformers/digital_twin_engine.py >> "$LOG_FILE" 2>&1
 log "[STEP 3] ✓ Done"
 
 # STEP 4: Supabase Sync
 log "[STEP 4] Supabase Sync"
-$PYTHON supabase_sync.py >> "$LOG_FILE" 2>&1
+$PYTHON loaders/supabase_sync.py >> "$LOG_FILE" 2>&1
 log "[STEP 4] ✓ Done"
 
 log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
