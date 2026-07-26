@@ -64,6 +64,7 @@ class Settings(BaseSettings):
         env_file = ".env"            # Load from .env file if it exists
         env_file_encoding = "utf-8"
         case_sensitive = False       # POSTGRES_HOST == postgres_host
+        extra = "ignore"             # Allow extra environment variables like PYTHONPATH
 
 
 # Singleton — import this anywhere: from core.config import settings
