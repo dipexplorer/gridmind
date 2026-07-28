@@ -8,7 +8,7 @@ import { TicketsWidget, Ticket } from '@/components/widgets/TicketsWidget';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { Activity, Zap, ShieldAlert, Cpu, Database, BarChart3, ArrowRight, Server, Download } from 'lucide-react';
-import { apiClient } from '@/lib/api';
+import { supabase } from '@/lib/supabaseClient';
 
 // Dynamically import Leaflet Map to avoid SSR issues
 const TransformerMap = dynamic(() => import('@/components/map/TransformerMap'), { ssr: false });
@@ -20,10 +20,18 @@ interface Transformer {
   rated_kva: number;
   location_name: string;
   operational_status: string;
+  // Raw lat/lon from transformers_flat view
+  latitude?: number;
+  longitude?: number;
+  // location as WKT string (built from lat/lon for map compatibility)
   location: string;
   substation_id?: string;
   address_text?: string;
   district?: string;
+  current_status?: string;
+  current_failure_risk?: number;
+  current_health_score?: number;
+  current_load_pct?: number;
 }
 
 interface RiskScore {
@@ -60,29 +68,27 @@ export default function Dashboard() {
 
   async function loadDashboardData() {
     try {
-      // 1. Check AI Run status
-      try {
-        const runRes = await apiClient.get("/ai-runs/latest");
-        setAiRunStatus(`Last updated: ${new Date(runRes.data.started_at).toLocaleTimeString()}`);
-      } catch {
-        setAiRunStatus("No scans run yet");
+      setAiRunStatus("Live — Supabase Direct");
+
+      // 1. Fetch all transformers from the flat view (lat/lon as plain floats)
+      const { data: transformers, error: trError } = await supabase
+        .from('transformers_flat')
+        .select('id, transformer_code, rated_kva, age_years, operational_status, district, address_text, substation_id, current_status, current_failure_risk, current_health_score, current_load_pct, current_load_kw, current_oil_temp_c, manufacturer, cooling_type, num_consumers, latitude, longitude')
+        .limit(2000);
+
+      if (trError) {
+        console.error("Supabase transformers_flat query failed:", trError);
+        return;
       }
 
-      // Fetch Substations
-      let subMap = new Map();
-      try {
-        const subRes = await apiClient.get("/substations/");
-        subMap = new Map(subRes.data.map((s: Substation) => [s.id, s.name]));
-      } catch (e) {
-        console.error("Failed to fetch substations", e);
-      }
+      // 2. Fetch substations for name lookup
+      const { data: substationsData } = await supabase
+        .from('substations')
+        .select('id, name');
+      const subMap = new Map((substationsData || []).map((s: any) => [s.id, s.name]));
 
-      // 2. Fetch all transformers
-      const trRes = await apiClient.get("/transformers/");
-      const transformers: Transformer[] = trRes.data;
-
-      // 3. Map scores using data already returned by the main API to avoid N+1 requests
-      const combined: CombinedData[] = transformers.map((t: any) => {
+      // 3. Build combined data with risk category & WKT location string for the map
+      const combined: CombinedData[] = (transformers || []).map((t: any) => {
         const substation_name = t.substation_id ? subMap.get(t.substation_id) : "Unknown Substation";
         const score = (t.current_failure_risk || 0) * 100;
         let cat = "UNKNOWN";
@@ -91,33 +97,22 @@ export default function Dashboard() {
           else if (score >= 70) cat = "WARNING";
           else cat = "HEALTHY";
         }
-        
+        // Build WKT string from flat lat/lon so TransformerMap's parseWKT() works
+        const location = (t.latitude && t.longitude)
+          ? `POINT(${t.longitude} ${t.latitude})`
+          : '';
         return {
           ...t,
           id: t.id,
+          location,
           substation_name,
           anomaly_score: score,
           risk_category: cat,
           expected_lifetime_days: cat === "HEALTHY" ? 365 : (cat === "WARNING" ? 90 : 7)
         };
       });
-      
-      
-      // 4. Fetch open tickets
-      try {
-        const tixRes = await apiClient.get("/operations/tickets?status=OPEN");
-        // Enrich tickets with transformer names
-        const enrichedTickets = tixRes.data.map((t: any) => {
-          const matchingTr = transformers.find(tr => tr.id === t.transformer_id);
-          return { ...t, transformer_name: matchingTr?.transformer_code || t.transformer_id.substring(0, 8).toUpperCase() };
-        });
-        setTickets(enrichedTickets);
-      } catch(e) {
-        console.error("Failed to fetch tickets", e);
-      }
-      
+
       setData(combined);
-      
       const uniqueSubs = Array.from(new Set(combined.map(c => c.substation_name).filter(Boolean))) as string[];
       setSubstationsList(uniqueSubs);
     } catch (err) {
@@ -133,17 +128,9 @@ export default function Dashboard() {
 
   const triggerAIScan = async () => {
     setScanning(true);
-    try {
-      await apiClient.post("/ai-runs/trigger");
-      // Wait for background tasks to process
-      setTimeout(async () => {
-        await loadDashboardData();
-        setScanning(false);
-      }, 3000);
-    } catch (e) {
-      console.error("Scan trigger failed", e);
-      setScanning(false);
-    }
+    // Re-fetch latest data from Supabase
+    await loadDashboardData();
+    setScanning(false);
   };
 
   // Compute filteredData reactively
