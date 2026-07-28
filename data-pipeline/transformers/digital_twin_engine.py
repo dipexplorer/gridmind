@@ -238,6 +238,25 @@ def run_engine(stress_test=False) -> list:
         # Metering (40.75% are metered per APDCL audit)
         is_metered = rng.random() < METERED_FRACTION
 
+        # --- NEW ENRICHED METADATA ---
+        num_consumers = int(rng.uniform(20, 150))
+        manufacturer = rng.choice(["ABB", "Crompton", "BHEL", "Siemens", "Voltamp"])
+        cooling_type = rng.choice(["ONAN", "ONAN", "ONAF"])
+        now_dt = datetime.now()
+        install_year = now_dt.year - age
+        install_month = int(rng.uniform(1, 12))
+        install_day = int(rng.uniform(1, 28))
+        installation_date = f"{install_year}-{install_month:02d}-{install_day:02d}"
+        
+        is_flood_prone = rng.random() < 0.10
+        is_high_lightning = rng.random() < 0.15
+        
+        district_name = row.get("district", "Unknown")
+        sub_code_val = row.get("Sub Div Code") or row.get("sub_div_code", "133")
+        ward = int(rng.uniform(1, 15))
+        address_text = f"Ward No. {ward}, Substation {sub_code_val}, {district_name}"
+        # ----------------------------
+
         # Track for T&D loss calibration check
         # T&D Loss = energy injected but not delivered = (rated - actual_load) / rated
         rated_kw = capacity_kva * 0.85
@@ -271,6 +290,14 @@ def run_engine(stress_test=False) -> list:
             "precipitation_mm": precip,
             "windspeed_kmh":    windspeed,
             "is_severe_weather": severe_wx,
+            # Enriched Metadata
+            "num_consumers":    num_consumers,
+            "manufacturer":     manufacturer,
+            "cooling_type":     cooling_type,
+            "installation_date": installation_date,
+            "is_flood_prone":   is_flood_prone,
+            "is_high_lightning": is_high_lightning,
+            "address_text":     address_text,
             # Metadata
             "snapshot_at":      now_iso,
         })

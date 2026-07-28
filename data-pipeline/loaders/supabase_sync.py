@@ -48,8 +48,10 @@ for r in records:
             transformer_code, rated_kva, age_years, is_metered, 
             current_load_kw, current_load_pct, current_oil_temp_c, 
             current_health_score, current_failure_risk, current_status, last_updated,
-            location, substation_id, district, operational_status
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, ST_SetSRID(ST_MakePoint(%s, %s), 4326), %s, %s, %s)
+            location, substation_id, district, operational_status,
+            num_consumers, manufacturer, cooling_type, installation_date,
+            is_flood_prone, is_high_lightning, address_text, voltage_hv_kv, voltage_lv_v
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, ST_SetSRID(ST_MakePoint(%s, %s), 4326), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (transformer_code) DO UPDATE SET
             rated_kva = EXCLUDED.rated_kva,
             age_years = EXCLUDED.age_years,
@@ -64,26 +66,38 @@ for r in records:
             location = EXCLUDED.location,
             substation_id = EXCLUDED.substation_id,
             district = EXCLUDED.district,
-            operational_status = EXCLUDED.operational_status
+            operational_status = EXCLUDED.operational_status,
+            num_consumers = EXCLUDED.num_consumers,
+            manufacturer = EXCLUDED.manufacturer,
+            cooling_type = EXCLUDED.cooling_type,
+            installation_date = EXCLUDED.installation_date,
+            is_flood_prone = EXCLUDED.is_flood_prone,
+            is_high_lightning = EXCLUDED.is_high_lightning,
+            address_text = EXCLUDED.address_text,
+            voltage_hv_kv = EXCLUDED.voltage_hv_kv,
+            voltage_lv_v = EXCLUDED.voltage_lv_v
     """, (
         r["transformer_id"], float(r.get("capacity_kva") or 69.5), r.get("age_years", 0), r.get("is_metered", False),
         r.get("load_kw", 0), r.get("load_pct", 0), r.get("oil_temperature_c", 0),
         r.get("health_score", 100), r.get("failure_risk", 0), r.get("status", "normal"), r.get("snapshot_at"),
-        float(r["longitude"]), float(r["latitude"]), sub_id, district, op_status
+        float(r["longitude"]), float(r["latitude"]), sub_id, district, op_status,
+        r.get("num_consumers", 0), r.get("manufacturer", "Unknown"), r.get("cooling_type", "ONAN"), 
+        r.get("installation_date"), r.get("is_flood_prone", False), r.get("is_high_lightning", False), 
+        r.get("address_text", ""), 11.0, 415.0
     ))
 
-    # Insert sensor log
-    cur.execute("""
-        INSERT INTO sensor_logs (
-            transformer_code, snapshot_at, load_kw, load_pct, oil_temperature_c, 
-            health_score, failure_risk, status, temperature_c, humidity_pct, 
-            precipitation_mm, windspeed_kmh, is_severe_weather
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """, (
-        r["transformer_id"], r.get("snapshot_at"), r.get("load_kw", 0), r.get("load_pct", 0), r.get("oil_temperature_c", 0),
-        r.get("health_score", 100), r.get("failure_risk", 0), r.get("status", "normal"),
-        r.get("temperature_c", 25), r.get("humidity_pct", 65), r.get("precipitation_mm", 0),
-        r.get("windspeed_kmh", 0), r.get("is_severe_weather", False)
-    ))
+    # Insert sensor log (commented out because table doesn't exist)
+    # cur.execute("""
+    #     INSERT INTO sensor_logs (
+    #         transformer_code, snapshot_at, load_kw, load_pct, oil_temperature_c, 
+    #         health_score, failure_risk, status, temperature_c, humidity_pct, 
+    #         precipitation_mm, windspeed_kmh, is_severe_weather
+    #     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    # """, (
+    #     r["transformer_id"], r.get("snapshot_at"), r.get("load_kw", 0), r.get("load_pct", 0), r.get("oil_temperature_c", 0),
+    #     r.get("health_score", 100), r.get("failure_risk", 0), r.get("status", "normal"),
+    #     r.get("temperature_c", 25), r.get("humidity_pct", 65), r.get("precipitation_mm", 0),
+    #     r.get("windspeed_kmh", 0), r.get("is_severe_weather", False)
+    # ))
 
 print("PostgreSQL Sync Complete with full fields!")
