@@ -305,9 +305,9 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
             {risk?.model_predictions && (
               <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl border border-slate-200/60 shadow-inner">
                 {[
-                  { id: "isolation_forest", label: "Isolation Forest (Prod)" },
-                  { id: "xgboost", label: "XGBoost (Supervised)" },
-                  { id: "random_forest", label: "Random Forest (Supervised)" }
+                  { id: "isolation_forest", label: "Isolation Forest (Prod Final)" },
+                  { id: "xgboost", label: "XGBoost (Validation)" },
+                  { id: "random_forest", label: "Random Forest (Validation)" }
                 ].map(m => (
                   <button
                     key={m.id}
@@ -663,6 +663,23 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                       Outdoor temp {weather.ambient_temperature_c.toFixed(1)}°C exceeds 35°C threshold — thermal stress adds +{weather.weather_penalty_percentage.toFixed(1)}% to failure risk.
                     </p>
                   )}
+                </div>
+              )}
+
+              {/* Validation Warning Callout */}
+              {selectedModel !== "isolation_forest" ? (
+                <div className="mt-5 p-3 bg-blue-50/60 border border-blue-100 rounded-2xl text-[11px] text-blue-700 flex items-start gap-2.5">
+                  <Info size={14} className="mt-0.5 text-blue-500 flex-shrink-0" />
+                  <span>
+                    <strong>Validation Mode Active:</strong> Displaying predictions from the supervised {selectedModel === "xgboost" ? "XGBoost" : "Random Forest"} model. The final production-grade status saved in the database is determined by the <strong>Isolation Forest (Prod Final)</strong> engine.
+                  </span>
+                </div>
+              ) : (
+                <div className="mt-5 p-3 bg-emerald-50/40 border border-emerald-100 rounded-2xl text-[11px] text-emerald-700 flex items-start gap-2.5">
+                  <CheckCircle size={14} className="mt-0.5 text-emerald-500 flex-shrink-0" />
+                  <span>
+                    <strong>Production Mode Active:</strong> Displaying the primary status predicted by <strong>Isolation Forest</strong>. This model runs automatically in the background every 24 hours to update the database.
+                  </span>
                 </div>
               )}
             </div>

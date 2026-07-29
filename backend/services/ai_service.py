@@ -31,10 +31,15 @@ class RealAIModel:
         self.model = None
         self.survival_model = None
         self.explainer = None
-        # Load models in background thread so the server starts instantly
-        # This prevents Render free-tier health-check timeouts
+        self._models_loaded = False
         import threading
-        threading.Thread(target=self.load_models, daemon=True).start()
+        self._lock = threading.Lock()
+
+    def load_models_if_needed(self):
+        with self._lock:
+            if not self._models_loaded:
+                self.load_models()
+                self._models_loaded = True
 
     def load_models(self):
         """
@@ -101,6 +106,7 @@ class RealAIModel:
         Performs real Isolation Forest inference, SHAP calculation, and survival duration estimation.
         Falls back to safe simulation if models are not generated yet.
         """
+        self.load_models_if_needed()
         # If models are not loaded, fallback to mock simulator
         if self.model is None or self.survival_model is None or self.explainer is None:
             return self._fallback_predict(transformer_id)
@@ -226,6 +232,7 @@ class RealAIModel:
         Performs batch inference over 24 hours of telemetry readings.
         Calculates daily average metrics and runs ML models on daily aggregated values.
         """
+        self.load_models_if_needed()
         if self.model is None or self.survival_model is None or not readings:
             return self._fallback_predict(transformer_id)
 
@@ -322,6 +329,7 @@ class RealAIModel:
         Run inference using Isolation Forest, XGBoost, and Random Forest in parallel.
         Returns anomaly scores and risk categories for each.
         """
+        self.load_models_if_needed()
         import pandas as pd
         import numpy as np
         
