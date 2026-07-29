@@ -47,7 +47,7 @@ def run_batch_prediction():
 
         for idx, t in enumerate(transformers):
             try:
-                # Synthesize 24 hourly readings on-the-fly using weather & rated capacity
+                # Get coordinates
                 lat = 26.14
                 lon = 91.74
                 try:
@@ -59,6 +59,9 @@ def run_batch_prediction():
                 except Exception:
                     pass
                 ambient_temp = ai_service._fetch_live_weather(lat, lon)
+
+                # 10% chance to simulate an anomaly (overheating/overloaded)
+                is_anomalous = (random.random() < 0.10)
                 
                 class SyntheticReading:
                     def __init__(self, temp_c, load_pct, v_lv, curr_a):
@@ -69,15 +72,22 @@ def run_batch_prediction():
                 
                 readings = []
                 for h in range(24):
-                    # Higher temperature during noon hours (11am - 4pm)
-                    temp_offset = random.uniform(5, 12) if 11 <= h <= 16 else random.uniform(0, 4)
-                    temp = ambient_temp + temp_offset + random.uniform(-2, 2)
-                    
-                    # Higher load in the evening (6pm - 10pm)
-                    load = random.uniform(85, 115) if 18 <= h <= 22 else random.uniform(40, 75)
-                    
-                    # Voltage drops under high load
-                    voltage = random.uniform(380, 398) if load > 85 else random.uniform(405, 420)
+                    if is_anomalous:
+                        # Overheating: oil temperature rises up to 105C
+                        temp = ambient_temp + random.uniform(50, 75)
+                        # Overloaded: load stays high at 110% - 135%
+                        load = random.uniform(105, 135)
+                        # Low voltage: voltage drops significantly
+                        voltage = random.uniform(350, 375)
+                    else:
+                        # Normal operations:
+                        # Higher temperature during noon hours (11am - 4pm)
+                        temp_offset = random.uniform(5, 12) if 11 <= h <= 16 else random.uniform(0, 4)
+                        temp = ambient_temp + temp_offset + random.uniform(-2, 2)
+                        # Higher load in the evening (6pm - 10pm)
+                        load = random.uniform(85, 115) if 18 <= h <= 22 else random.uniform(40, 75)
+                        # Voltage drops under high load
+                        voltage = random.uniform(380, 398) if load > 85 else random.uniform(405, 420)
                     
                     # Current is proportional to load
                     base_current = (float(t.rated_kva) * 1000.0) / (415.0 * 1.732) if t.rated_kva else 139.0
@@ -85,8 +95,8 @@ def run_batch_prediction():
                     
                     readings.append(SyntheticReading(temp, load, voltage, current))
 
-                # Run Batch ML Predictor
-                pred = ai_service.predict_daily_health(str(t.id), readings)
+                # Run Batch ML Predictor without SHAP calculations (not saved to DB)
+                pred = ai_service.predict_daily_health(str(t.id), readings, calculate_shap=False)
                 shap_values = pred.pop("shap_values", [])
 
                 # Translate predictions to database properties

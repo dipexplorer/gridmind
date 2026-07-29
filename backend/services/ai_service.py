@@ -70,19 +70,30 @@ class RealAIModel:
         """
         Fetches live ambient temperature from Open-Meteo API.
         Returns the temperature in Celsius, or 30.0 as fallback.
+        Caches results using a single global key to avoid API rate limits and timeouts.
         """
-        if not lat or not lon:
-            return 30.0
+        cache_key = "assam_weather"
+        if not hasattr(self, '_weather_cache'):
+            self._weather_cache = {}
+            
+        if cache_key in self._weather_cache:
+            return self._weather_cache[cache_key]
+            
         try:
             import requests
-            url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
+            # Use Guwahati coordinates as the central reference for the region
+            url = "https://api.open-meteo.com/v1/forecast?latitude=26.14&longitude=91.74&current_weather=true"
             response = requests.get(url, timeout=3)
             if response.status_code == 200:
                 data = response.json()
-                return float(data.get("current_weather", {}).get("temperature", 30.0))
+                temp = float(data.get("current_weather", {}).get("temperature", 30.0))
+                self._weather_cache[cache_key] = temp
+                return temp
+            self._weather_cache[cache_key] = 30.0
             return 30.0
         except Exception as e:
             logger.warning(f"Weather API failed: {e}. Using fallback ambient temperature.")
+            self._weather_cache[cache_key] = 30.0
             return 30.0
 
     def predict_anomaly(self, transformer_id: str) -> Dict[str, Any]:
@@ -202,7 +213,7 @@ class RealAIModel:
         finally:
             db.close()
 
-    def predict_daily_health(self, transformer_id: str, readings: list) -> Dict[str, Any]:
+    def predict_daily_health(self, transformer_id: str, readings: list, calculate_shap: bool = True) -> Dict[str, Any]:
         """
         Performs batch inference over 24 hours of telemetry readings.
         Calculates daily average metrics and runs ML models on daily aggregated values.
@@ -238,34 +249,49 @@ class RealAIModel:
             else:
                 category = "HEALTHY"
 
-            # Compute SHAP values on daily averages for 24x speedup
+            # Compute daily averages
             mean_features = df.mean()
-            df_mean = pd.DataFrame([mean_features.values], columns=self.features)
-            assert self.explainer is not None
-            shap_vals = self.explainer.shap_values(df_mean)[0]
 
             shap_list = []
-            for i, name in enumerate(self.features):
+            if calculate_shap and self.explainer is not None:
+                # Compute SHAP values on daily averages
+                df_mean = pd.DataFrame([mean_features.values], columns=self.features)
+                shap_vals = self.explainer.shap_values(df_mean)[0]
+
+                for i, name in enumerate(self.features):
+                    shap_list.append({
+                        "feature_name": name,
+                        "feature_value": round(float(mean_features[name]), 2),
+                        "shap_value": round(float(shap_vals[i]), 4)
+                    })
                 shap_list.append({
                     "feature_name": name,
                     "feature_value": round(float(mean_features[name]), 2),
                     "shap_value": round(float(shap_vals[i]), 4)
                 })
 
-            # Predict Expected Life remaining (Cox Proportional Hazards) using daily averages
+            # Predict Expected Life remaining (Cox Proportional Hazards) using cached daily averages
             avg_temp = float(mean_features["temperature_c"])
             avg_load = float(mean_features["load_percentage"])
-            surv_x = pd.DataFrame([[avg_temp, avg_load]], columns=["temperature_c", "load_percentage"])
-
-            try:
-                median_life = self.survival_model.predict_median(surv_x)
-                expected_lifetime_days = float(median_life.iloc[0])
-                if np.isinf(expected_lifetime_days) or np.isnan(expected_lifetime_days):
+            
+            survival_cache_key = (round(avg_temp), round(avg_load / 5.0) * 5)
+            if not hasattr(self, '_survival_cache'):
+                self._survival_cache = {}
+                
+            if survival_cache_key in self._survival_cache:
+                expected_lifetime_days = self._survival_cache[survival_cache_key]
+            else:
+                surv_x = pd.DataFrame([[avg_temp, avg_load]], columns=["temperature_c", "load_percentage"])
+                try:
+                    median_life = self.survival_model.predict_median(surv_x)
+                    expected_lifetime_days = float(median_life.iloc[0])
+                    if np.isinf(expected_lifetime_days) or np.isnan(expected_lifetime_days):
+                        expected_lifetime_days = int((100 - daily_anomaly_score) * 36.5)
+                    else:
+                        expected_lifetime_days = int(expected_lifetime_days)
+                except Exception:
                     expected_lifetime_days = int((100 - daily_anomaly_score) * 36.5)
-                else:
-                    expected_lifetime_days = int(expected_lifetime_days)
-            except Exception:
-                expected_lifetime_days = int((100 - daily_anomaly_score) * 36.5)
+                self._survival_cache[survival_cache_key] = expected_lifetime_days
 
             return {
                 "transformer_id": transformer_id,
