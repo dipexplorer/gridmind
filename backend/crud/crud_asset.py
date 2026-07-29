@@ -37,5 +37,8 @@ def create_transformer(db: Session, transformer: TransformerCreate):
     db.refresh(db_transformer)
     return db_transformer
 
-def get_transformers(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(Transformer).offset(skip).limit(limit).all()
+def get_transformers(db: Session, skip: int = 0, limit: int = None):
+    query = db.query(Transformer).offset(skip)
+    if limit is not None:
+        query = query.limit(limit)
+    return query.all()
