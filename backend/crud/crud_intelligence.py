@@ -21,25 +21,22 @@ def get_transformer_score(db: Session, transformer_id: str):
             cat = "CRITICAL"
             lifetime_days = 7
         elif status == "warning":
-            cat = "HIGH"
+            cat = "WARNING"
             lifetime_days = 30
-        elif status == "normal":
-            # Further refine based on actual score
-            if anomaly_score_pct >= 70:
+        elif status == "healthy":
+            cat = "HEALTHY"
+            lifetime_days = 365
+        else:
+            # Fallback based on score
+            if anomaly_score_pct >= 90:
                 cat = "CRITICAL"
                 lifetime_days = 7
-            elif anomaly_score_pct >= 40:
-                cat = "HIGH"
+            elif anomaly_score_pct >= 70:
+                cat = "WARNING"
                 lifetime_days = 30
-            elif anomaly_score_pct >= 20:
-                cat = "MEDIUM"
-                lifetime_days = 90
             else:
-                cat = "LOW"
+                cat = "HEALTHY"
                 lifetime_days = 365
-        else:
-            cat = "LOW"
-            lifetime_days = 365
             
         import uuid
         return {

@@ -115,6 +115,7 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
   const [loading, setLoading]       = useState(true);
   const [detail, setDetail]         = useState<DetailData | null>(null);
   const [timeseries, setTimeseries] = useState<TSPoint[]>([]);
+  const [history, setHistory]       = useState<any[]>([]);
   const [maintenance, setMaintenance] = useState<MLog[]>([]);
   const [shap, setShap]             = useState<ShapRow[]>([]);
   const [risk, setRisk]             = useState<Risk | null>(null);
@@ -137,17 +138,19 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
         setDetail(detailData);
       }
 
-      const [ts, maint, shapR, riskR] = await Promise.allSettled([
+      const [ts, maint, shapR, riskR, historyR] = await Promise.allSettled([
         apiClient.get(`/transformers/${id}/timeseries`),
         apiClient.get(`/transformers/${id}/maintenance`),
         apiClient.get(`/transformers/${id}/shap-explanations`),
         apiClient.get(`/transformers/${id}/risk-score`),
+        apiClient.get(`/transformers/${id}/score-history`),
       ]);
       if (ts.status === "fulfilled")    setTimeseries(ts.value.data);
       if (maint.status === "fulfilled") setMaintenance(maint.value.data);
       if (shapR.status === "fulfilled") setShap(shapR.value.data);
       if (riskR.status === "fulfilled") setRisk(riskR.value.data);
       else setRisk({ anomaly_score: 0, risk_category: "UNKNOWN", expected_lifetime_days: 0 });
+      if (historyR.status === "fulfilled") setHistory(historyR.value.data);
 
       // ── Live Weather: Call Open-Meteo directly from frontend ─────────────────
       // This is fully independent of backend — works even if Render is down.
@@ -431,6 +434,47 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                     );
                   })}
                 </div>
+              )}
+            </div>
+
+            {/* AI Health Index Trend */}
+            <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-7">
+              <SectionTitle icon={TrendingUp} title="AI Health Index Trend" subtitle="Historical daily health score evaluation history" />
+
+              {history.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-52 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400">
+                  <TrendingUp size={32} className="mb-2 opacity-40" />
+                  <p className="text-sm font-semibold">No historical evaluation data available</p>
+                  <p className="text-xs mt-1">Run daily batch predictions to construct history</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={240}>
+                  <AreaChart data={history.map(h => ({
+                    ...h,
+                    formattedDate: new Date(h.calculated_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+                  }))} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="healthGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  stopColor="#10B981" stopOpacity={0.15} />
+                        <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                    <XAxis dataKey="formattedDate" stroke="#CBD5E1" fontSize={11} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#CBD5E1" fontSize={11} tickLine={false} axisLine={false} domain={[0, 100]} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Area
+                      type="monotone"
+                      dataKey="health_score"
+                      stroke="#10B981"
+                      strokeWidth={2.5}
+                      fill="url(#healthGrad)"
+                      name="Health Score (%)"
+                      dot={{ r: 4, fill: "#10B981", stroke: "#fff", strokeWidth: 1.5 }}
+                      activeDot={{ r: 6, fill: "#10B981", stroke: "#fff", strokeWidth: 2 }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
               )}
             </div>
 

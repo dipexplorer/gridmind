@@ -131,6 +131,27 @@ def get_transformer_shap_explanations(id: uuid.UUID, db: Session = Depends(get_d
         
     return explanations
 
+@router.get("/transformers/{id}/score-history", response_model=List[Dict[str, Any]])
+def get_transformer_score_history(id: uuid.UUID, db: Session = Depends(get_db)):
+    """
+    Fetch the historical health/anomaly scores for a specific transformer.
+    """
+    scores = db.query(TransformerScore)\
+        .filter(TransformerScore.transformer_id == id)\
+        .order_by(TransformerScore.calculated_at.asc())\
+        .all()
+    
+    return [
+        {
+            "id": str(s.id),
+            "anomaly_score": float(s.anomaly_score) if s.anomaly_score is not None else 0.0,
+            "health_score": int(100 - float(s.anomaly_score)) if s.anomaly_score is not None else 100,
+            "risk_category": s.risk_category,
+            "calculated_at": s.calculated_at.isoformat()
+        }
+        for s in scores
+    ]
+
 @router.get("/transformers/{id}/forecast", response_model=List[Dict[str, Any]])
 def get_transformer_forecast(id: uuid.UUID, db: Session = Depends(get_db)):
     """
