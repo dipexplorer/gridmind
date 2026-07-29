@@ -72,14 +72,32 @@ export default function Dashboard() {
       // Status shown via lastRefreshed timestamp set at end of load
 
       // 1. Fetch all transformers from the flat view (lat/lon as plain floats)
-      const { data: transformers, error: trError } = await supabase
-        .from('transformers_flat')
-        .select('id, transformer_code, rated_kva, age_years, operational_status, district, address_text, substation_id, current_status, current_failure_risk, current_health_score, current_load_pct, current_load_kw, current_oil_temp_c, manufacturer, cooling_type, num_consumers, latitude, longitude')
-        .limit(2000);
+      let allTransformers: any[] = [];
+      let pageNum = 0;
+      const pageSize = 1000;
+      let hasMore = true;
 
-      if (trError) {
-        console.error("Supabase transformers_flat query failed:", trError);
-        return;
+      while (hasMore) {
+        const { data: chunk, error: trError } = await supabase
+          .from('transformers_flat')
+          .select('id, transformer_code, rated_kva, age_years, operational_status, district, address_text, substation_id, current_status, current_failure_risk, current_health_score, current_load_pct, current_load_kw, current_oil_temp_c, manufacturer, cooling_type, num_consumers, latitude, longitude')
+          .range(pageNum * pageSize, (pageNum + 1) * pageSize - 1);
+
+        if (trError) {
+          console.error("Supabase transformers_flat query failed:", trError);
+          return;
+        }
+
+        if (chunk && chunk.length > 0) {
+          allTransformers = [...allTransformers, ...chunk];
+          if (chunk.length < pageSize) {
+            hasMore = false;
+          } else {
+            pageNum++;
+          }
+        } else {
+          hasMore = false;
+        }
       }
 
       // 2. Fetch substations for name lookup
@@ -89,7 +107,7 @@ export default function Dashboard() {
       const subMap = new Map((substationsData || []).map((s: any) => [s.id, s.name]));
 
       // 3. Build combined data with risk category & WKT location string for the map
-      const combined: CombinedData[] = (transformers || []).map((t: any) => {
+      const combined: CombinedData[] = (allTransformers || []).map((t: any) => {
         const substation_name = t.substation_id ? subMap.get(t.substation_id) : "Unknown Substation";
         const score = (t.current_failure_risk || 0) * 100;
         let cat = "UNKNOWN";

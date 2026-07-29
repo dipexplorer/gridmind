@@ -16,12 +16,12 @@ import uuid
 import logging
 from datetime import datetime, timezone
 
+import random
 # Add parent directory to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.database import SessionLocal
 from models.asset import Transformer
-from models.timeseries import LoadReading
 from models.intelligence import TransformerScore, ShapExplanation, ScoreRunMetadata
 from services.ai_service import ai_service
 
@@ -53,16 +53,35 @@ def run_batch_prediction():
 
         for idx, t in enumerate(transformers):
             try:
-                # Fetch latest 24 readings to represent the last 24 hours
-                readings = db.query(LoadReading)\
-                    .filter(LoadReading.transformer_id == t.id)\
-                    .order_by(LoadReading.time.desc())\
-                    .limit(24)\
-                    .all()
-
-                if not readings:
-                    logger.warning(f"No telemetry found for transformer {t.transformer_code}. Skipping.")
-                    continue
+                # Synthesize 24 hourly readings on-the-fly using weather & rated capacity
+                lat = float(t.latitude) if t.latitude else 26.14
+                lon = float(t.longitude) if t.longitude else 91.74
+                ambient_temp = ai_service._fetch_live_weather(lat, lon)
+                
+                class SyntheticReading:
+                    def __init__(self, temp_c, load_pct, v_lv, curr_a):
+                        self.temperature_c = temp_c
+                        self.load_percentage = load_pct
+                        self.voltage_lv = v_lv
+                        self.current_a = curr_a
+                
+                readings = []
+                for h in range(24):
+                    # Higher temperature during noon hours (11am - 4pm)
+                    temp_offset = random.uniform(5, 12) if 11 <= h <= 16 else random.uniform(0, 4)
+                    temp = ambient_temp + temp_offset + random.uniform(-2, 2)
+                    
+                    # Higher load in the evening (6pm - 10pm)
+                    load = random.uniform(85, 115) if 18 <= h <= 22 else random.uniform(40, 75)
+                    
+                    # Voltage drops under high load
+                    voltage = random.uniform(380, 398) if load > 85 else random.uniform(405, 420)
+                    
+                    # Current is proportional to load
+                    base_current = (t.rated_kva * 1000) / (415 * 1.732) if t.rated_kva else 139.0
+                    current = base_current * (load / 100.0) + random.uniform(-5, 5)
+                    
+                    readings.append(SyntheticReading(temp, load, voltage, current))
 
                 # Run Batch ML Predictor
                 pred = ai_service.predict_daily_health(str(t.id), readings)

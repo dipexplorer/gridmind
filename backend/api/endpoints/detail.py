@@ -5,7 +5,6 @@ import uuid
 
 from core.database import get_db
 from models.asset import Transformer, Substation, Feeder
-from models.timeseries import LoadReading
 from models.event import MaintenanceLog
 from models.intelligence import TransformerScore, ShapExplanation
 from schemas.detail import LoadReadingResponse, MaintenanceLogResponse, MaintenanceLogCreate
@@ -55,16 +54,49 @@ def get_transformer_detail(id: uuid.UUID, db: Session = Depends(get_db)):
         "substation_name": substation.name if substation else "Unknown Substation"
     }
 
-@router.get("/transformers/{id}/timeseries", response_model=List[LoadReadingResponse])
+@router.get("/transformers/{id}/timeseries", response_model=List[Dict[str, Any]])
 def get_transformer_timeseries(id: uuid.UUID, db: Session = Depends(get_db)):
     """
-    Fetch latest 24 load and temperature readings for a transformer.
+    Generate latest 24 load and temperature readings for a transformer on-the-fly.
     """
-    readings = db.query(LoadReading)\
-        .filter(LoadReading.transformer_id == id)\
-        .order_by(LoadReading.time.asc())\
-        .limit(24)\
-        .all()
+    tx = db.query(Transformer).filter(Transformer.id == id).first()
+    if not tx:
+        raise HTTPException(status_code=404, detail="Transformer not found")
+
+    from services.ai_service import ai_service
+    lat = float(tx.latitude) if tx.latitude else 26.14
+    lon = float(tx.longitude) if tx.longitude else 91.74
+    ambient_temp = ai_service._fetch_live_weather(lat, lon)
+
+    from datetime import datetime, timezone, timedelta
+    import random
+    
+    now = datetime.now(timezone.utc)
+    readings = []
+    
+    for h in range(24):
+        time_pt = now - timedelta(hours=(23 - h))
+        hour = time_pt.hour
+        temp_offset = random.uniform(5, 12) if 11 <= hour <= 16 else random.uniform(0, 4)
+        temp = ambient_temp + temp_offset + random.uniform(-1, 1)
+        
+        load = random.uniform(85, 115) if 18 <= hour <= 22 else random.uniform(40, 75)
+        voltage = random.uniform(380, 398) if load > 85 else random.uniform(405, 420)
+        
+        base_current = (tx.rated_kva * 1000) / (415 * 1.732) if tx.rated_kva else 139.0
+        current = base_current * (load / 100.0) + random.uniform(-5, 5)
+        
+        readings.append({
+            "id": str(uuid.uuid4()),
+            "transformer_id": str(id),
+            "time": time_pt.isoformat(),
+            "load_percentage": round(load, 2),
+            "voltage_lv": round(voltage, 1),
+            "current_a": round(current, 1),
+            "temperature_c": round(temp, 1),
+            "source": "SIMULATION"
+        })
+        
     return readings
 
 @router.get("/transformers/{id}/maintenance", response_model=List[MaintenanceLogResponse])
@@ -158,13 +190,8 @@ def get_transformer_forecast(id: uuid.UUID, db: Session = Depends(get_db)):
     Generate a 24-hour future load forecast for a transformer.
     (Phase 2 feature: Time-Series Prediction)
     """
-    # Fetch the latest reading to baseline the forecast
-    latest_reading = db.query(LoadReading)\
-        .filter(LoadReading.transformer_id == id)\
-        .order_by(LoadReading.time.desc())\
-        .first()
-
-    base_load = float(latest_reading.load_percentage) if latest_reading and latest_reading.load_percentage else 45.0
+    tx = db.query(Transformer).filter(Transformer.id == id).first()
+    base_load = float(tx.current_load_pct) if tx and tx.current_load_pct is not None else 45.0
     from datetime import datetime, timezone, timedelta
     import random
     

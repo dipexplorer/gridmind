@@ -45,39 +45,19 @@ def score_all_transformers(task_id: str = None):
             
             if prediction["risk_category"] in ["WARNING", "CRITICAL"]:
                 anomalies_detected += 1
-                # Create an Alert and Ticket in the Database automatically
-                from models.event import Alert, MaintenanceTicket
-                
-                alert_msg = f"AI Predicted {prediction['risk_category']} risk for transformer {t.transformer_code}."
-                alert = Alert(
-                    transformer_id=t.id,
-                    severity=prediction["risk_category"],
-                    message=alert_msg
-                )
-                db.add(alert)
-                db.flush() # flush to get alert.id
-                
-                ticket = MaintenanceTicket(
-                    transformer_id=t.id,
-                    alert_id=alert.id,
-                    status="OPEN",
-                    priority=prediction["risk_category"],
-                    description=f"Auto-generated ticket due to {prediction['risk_category']} anomaly score: {prediction['anomaly_score']}"
-                )
-                db.add(ticket)
-                db.flush()
 
-                # Broadcast new alert via WebSockets
+                # Broadcast new alert via WebSockets (without database insert)
                 from services.websocket import manager
+                from datetime import datetime
                 try:
                     manager.broadcast_sync({
                         "type": "NEW_ALERT",
                         "alert": {
-                            "id": str(alert.id),
+                            "id": str(uuid.uuid4()),
                             "transformer_id": str(t.id),
-                            "severity": alert.severity,
-                            "message": alert.message,
-                            "created_at": alert.created_at.isoformat() if alert.created_at else None
+                            "severity": prediction["risk_category"],
+                            "message": f"AI Predicted {prediction['risk_category']} risk for transformer {t.transformer_code}.",
+                            "created_at": datetime.now().isoformat()
                         }
                     })
                 except Exception as ws_err:

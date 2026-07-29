@@ -16,7 +16,6 @@ if not hasattr(scipy.integrate, 'trapz'):
 from typing import Dict, Any
 
 from core.database import SessionLocal
-from models.timeseries import LoadReading
 
 logger = logging.getLogger(__name__)
 
@@ -97,23 +96,22 @@ class RealAIModel:
 
         db = SessionLocal()
         try:
-            # 1. Fetch latest sensor reading for this transformer from DB
-            reading = db.query(LoadReading)\
-                .filter(LoadReading.transformer_id == transformer_id)\
-                .order_by(LoadReading.time.desc())\
-                .first()
+            # 1. Fetch current values from the Transformer table directly
+            from models.asset import Transformer
+            t = db.query(Transformer).filter(Transformer.id == transformer_id).first()
 
-            if not reading:
-                # Use default healthy telemetry if no readings exist yet
+            if not t:
                 load_pct = 45.0
                 v_lv = 415.0
                 curr_a = 60.0
                 temp_c = 40.0
             else:
-                load_pct = float(reading.load_percentage) if reading.load_percentage is not None else 0.0
-                v_lv = float(reading.voltage_lv) if reading.voltage_lv is not None else 0.0
-                curr_a = float(reading.current_a) if reading.current_a is not None else 0.0
-                temp_c = float(reading.temperature_c) if reading.temperature_c is not None else 0.0
+                load_pct = float(t.current_load_pct) if t.current_load_pct is not None else 45.0
+                temp_c = float(t.current_oil_temp_c) if t.current_oil_temp_c is not None else 40.0
+                # Synthesize voltage and current corresponding to the stored load
+                v_lv = random.uniform(380, 398) if load_pct > 85 else random.uniform(405, 420)
+                base_current = (t.rated_kva * 1000) / (415 * 1.732) if t.rated_kva else 139.0
+                curr_a = base_current * (load_pct / 100.0) + random.uniform(-2, 2)
 
             # 2. Structure feature vector
             x = np.array([[temp_c, load_pct, v_lv, curr_a]])
