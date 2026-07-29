@@ -130,6 +130,17 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
   const [oilBdv, setOilBdv]         = useState("");
   const [submitState, setSubmitState] = useState<"idle" | "loading" | "success" | "error">("idle");
 
+  const currentRisk = React.useMemo(() => {
+    if (risk?.model_predictions && (risk.model_predictions as any)[selectedModel]) {
+      return (risk.model_predictions as any)[selectedModel];
+    }
+    return {
+      anomaly_score: risk?.anomaly_score ?? 0,
+      risk_category: risk?.risk_category ?? "UNKNOWN",
+      expected_lifetime_days: risk?.expected_lifetime_days ?? 365
+    };
+  }, [risk, selectedModel]);
+
   const loadData = useCallback(async () => {
     try {
       const [detailRes] = await Promise.allSettled([apiClient.get(`/transformers/${id}/detail`)]);
@@ -241,17 +252,6 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
   }
 
   // ── Derived data ─────────────────────────────────────────────────────────────
-  // ── Derived data ─────────────────────────────────────────────────────────────
-  const currentRisk = React.useMemo(() => {
-    if (risk?.model_predictions && (risk.model_predictions as any)[selectedModel]) {
-      return (risk.model_predictions as any)[selectedModel];
-    }
-    return {
-      anomaly_score: risk?.anomaly_score ?? 0,
-      risk_category: risk?.risk_category ?? "UNKNOWN",
-      expected_lifetime_days: risk?.expected_lifetime_days ?? 365
-    };
-  }, [risk, selectedModel]);
 
   const riskMeta = RISK_META[currentRisk.risk_category] ?? RISK_META.UNKNOWN;
   const latest   = timeseries[timeseries.length - 1] ?? { temperature_c: 0, load_percentage: 0, voltage_lv: 0, current_a: 0 };
