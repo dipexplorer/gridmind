@@ -82,14 +82,31 @@ def get_transformer_timeseries(id: uuid.UUID, db: Session = Depends(get_db)):
     now = datetime.now(timezone.utc)
     readings = []
     
+    # Check if this transformer is anomalous based on database status
+    status = (tx.current_status or "").lower()
+    is_critical = status == "critical"
+    is_warning = status == "warning"
+    
     for h in range(24):
         time_pt = now - timedelta(hours=(23 - h))
         hour = time_pt.hour
-        temp_offset = random.uniform(5, 12) if 11 <= hour <= 16 else random.uniform(0, 4)
-        temp = ambient_temp + temp_offset + random.uniform(-1, 1)
         
-        load = random.uniform(85, 115) if 18 <= hour <= 22 else random.uniform(40, 75)
-        voltage = random.uniform(380, 398) if load > 85 else random.uniform(405, 420)
+        if is_critical:
+            # Critical status: Simulate high load, high temperature, low voltage
+            temp = ambient_temp + random.uniform(55, 75)
+            load = random.uniform(105, 135)
+            voltage = random.uniform(350, 375)
+        elif is_warning:
+            # Warning status: Moderate abnormalities
+            temp = ambient_temp + random.uniform(35, 55)
+            load = random.uniform(85, 110)
+            voltage = random.uniform(370, 395)
+        else:
+            # Healthy status: Normal cycles
+            temp_offset = random.uniform(5, 12) if 11 <= hour <= 16 else random.uniform(0, 4)
+            temp = ambient_temp + temp_offset + random.uniform(-1, 1)
+            load = random.uniform(40, 80)
+            voltage = random.uniform(405, 420)
         
         base_current = (float(tx.rated_kva) * 1000.0) / (415.0 * 1.732) if tx.rated_kva else 139.0
         current = base_current * (load / 100.0) + random.uniform(-5, 5)
