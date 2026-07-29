@@ -455,23 +455,26 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                   }))} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="healthGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor="#10B981" stopOpacity={0.15} />
-                        <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                        <stop offset="5%"  stopColor={scoreColor} stopOpacity={0.15} />
+                        <stop offset="95%" stopColor={scoreColor} stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
                     <XAxis dataKey="formattedDate" stroke="#CBD5E1" fontSize={11} tickLine={false} axisLine={false} />
                     <YAxis stroke="#CBD5E1" fontSize={11} tickLine={false} axisLine={false} domain={[0, 100]} />
                     <Tooltip content={<CustomTooltip />} />
+                    {/* Visual threshold guidelines */}
+                    <ReferenceLine y={10} stroke="#ef4444" strokeDasharray="3 3" label={{ value: 'Critical Threshold', fill: '#ef4444', fontSize: 10, position: 'top' }} />
+                    <ReferenceLine y={30} stroke="#f59e0b" strokeDasharray="3 3" label={{ value: 'Warning Threshold', fill: '#f59e0b', fontSize: 10, position: 'top' }} />
                     <Area
                       type="monotone"
                       dataKey="health_score"
-                      stroke="#10B981"
+                      stroke={scoreColor}
                       strokeWidth={2.5}
                       fill="url(#healthGrad)"
                       name="Health Score (%)"
-                      dot={{ r: 4, fill: "#10B981", stroke: "#fff", strokeWidth: 1.5 }}
-                      activeDot={{ r: 6, fill: "#10B981", stroke: "#fff", strokeWidth: 2 }}
+                      dot={{ r: 4, fill: scoreColor, stroke: "#fff", strokeWidth: 1.5 }}
+                      activeDot={{ r: 6, fill: scoreColor, stroke: "#fff", strokeWidth: 2 }}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
