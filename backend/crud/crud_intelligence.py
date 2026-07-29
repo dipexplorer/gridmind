@@ -44,18 +44,60 @@ def get_transformer_score(db: Session, transformer_id: str):
                 cat = "HEALTHY"
                 lifetime_days = 365
             
-        # Call on-the-fly predictions for all models
+        # Generate the latest reading matching the timeseries simulation deterministically
+        from datetime import datetime, timezone
         from services.ai_service import ai_service
-        temp_c = float(transformer.current_oil_temp_c) if transformer.current_oil_temp_c is not None else 45.0
-        load_pct = float(transformer.current_load_pct) if transformer.current_load_pct is not None else 50.0
+        now = datetime.now(timezone.utc)
         
+        # Calculate ambient temperature (same logic as detail.py)
+        lat = 26.14
+        lon = 91.74
+        try:
+            from geoalchemy2.shape import to_shape
+            if transformer.location:
+                point = to_shape(transformer.location)
+                lat = float(point.y)
+                lon = float(point.x)
+        except Exception:
+            pass
+        ambient_temp = ai_service._fetch_live_weather(lat, lon)
+        
+        status_str = (transformer.current_status or "").lower()
+        is_critical = status_str == "critical"
+        is_warning = status_str == "warning"
+        
+        # Seed with transformer ID and current hour's timestamp (rounded to hour)
+        seed_str = f"{transformer_id}_{now.strftime('%Y%m%d%H')}"
         import random
-        random.seed(transformer.id.bytes)
-        v_lv = random.uniform(380, 398) if load_pct > 85 else random.uniform(405, 420)
+        local_random = random.Random(seed_str)
+        
+        if is_critical:
+            temp_c = ambient_temp + local_random.uniform(55, 75)
+            load_pct = local_random.uniform(105, 135)
+            v_lv = local_random.uniform(350, 375)
+        elif is_warning:
+            temp_c = ambient_temp + local_random.uniform(35, 55)
+            load_pct = local_random.uniform(85, 110)
+            v_lv = local_random.uniform(370, 395)
+        else:
+            hour = now.hour
+            temp_offset = local_random.uniform(5, 12) if 11 <= hour <= 16 else local_random.uniform(0, 4)
+            temp_c = ambient_temp + temp_offset + local_random.uniform(-1, 1)
+            load_pct = local_random.uniform(40, 80)
+            v_lv = local_random.uniform(405, 420)
+            
         base_current = (float(transformer.rated_kva) * 1000.0) / (415.0 * 1.732) if transformer.rated_kva else 139.0
-        curr_a = base_current * (load_pct / 100.0) + random.uniform(-2, 2)
+        curr_a = base_current * (load_pct / 100.0) + local_random.uniform(-5, 5)
         
         preds = ai_service.predict_all_models(temp_c, load_pct, v_lv, curr_a)
+        
+        # Isolation Forest (Prod Final) should always match the actual database values to ensure
+        # map and individual detail page consistency.
+        preds["isolation_forest"] = {
+            "anomaly_score": anomaly_score_pct,
+            "risk_category": cat,
+            "expected_lifetime_days": lifetime_days
+        }
         
         import uuid
         return {

@@ -91,25 +91,29 @@ def get_transformer_timeseries(id: uuid.UUID, db: Session = Depends(get_db)):
         time_pt = now - timedelta(hours=(23 - h))
         hour = time_pt.hour
         
+        # Use a stable seed per hour and transformer to keep telemetry consistent across requests
+        seed_str = f"{id}_{time_pt.strftime('%Y%m%d%H')}"
+        local_random = random.Random(seed_str)
+        
         if is_critical:
             # Critical status: Simulate high load, high temperature, low voltage
-            temp = ambient_temp + random.uniform(55, 75)
-            load = random.uniform(105, 135)
-            voltage = random.uniform(350, 375)
+            temp = ambient_temp + local_random.uniform(55, 75)
+            load = local_random.uniform(105, 135)
+            voltage = local_random.uniform(350, 375)
         elif is_warning:
             # Warning status: Moderate abnormalities
-            temp = ambient_temp + random.uniform(35, 55)
-            load = random.uniform(85, 110)
-            voltage = random.uniform(370, 395)
+            temp = ambient_temp + local_random.uniform(35, 55)
+            load = local_random.uniform(85, 110)
+            voltage = local_random.uniform(370, 395)
         else:
             # Healthy status: Normal cycles
-            temp_offset = random.uniform(5, 12) if 11 <= hour <= 16 else random.uniform(0, 4)
-            temp = ambient_temp + temp_offset + random.uniform(-1, 1)
-            load = random.uniform(40, 80)
-            voltage = random.uniform(405, 420)
+            temp_offset = local_random.uniform(5, 12) if 11 <= hour <= 16 else local_random.uniform(0, 4)
+            temp = ambient_temp + temp_offset + local_random.uniform(-1, 1)
+            load = local_random.uniform(40, 80)
+            voltage = local_random.uniform(405, 420)
         
         base_current = (float(tx.rated_kva) * 1000.0) / (415.0 * 1.732) if tx.rated_kva else 139.0
-        current = base_current * (load / 100.0) + random.uniform(-5, 5)
+        current = base_current * (load / 100.0) + local_random.uniform(-5, 5)
         
         readings.append({
             "id": str(uuid.uuid4()),
