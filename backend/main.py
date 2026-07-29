@@ -40,12 +40,34 @@ async def health_check():
     return {"status": "ok", "version": "1.0.0"}
 
 
-import asyncio
-from services.websocket import manager
+def schedule_daily_batch():
+    """
+    Background thread to execute daily ML predictions batch run automatically.
+    First execution starts 30 seconds after server startup, then repeats every 24 hours.
+    """
+    import time
+    import logging
+    # Wait for startup phase to complete so health checks are unaffected
+    time.sleep(30)
+    logger = logging.getLogger("startup_scheduler")
+    from scripts.predict_daily_batch import run_batch_prediction
+    while True:
+        try:
+            logger.info("Automatically executing daily batch prediction run...")
+            run_batch_prediction()
+            logger.info("Automatic daily batch prediction completed successfully.")
+        except Exception as e:
+            logger.error(f"Automatic daily batch prediction run failed: {e}")
+        # Sleep for 24 hours
+        time.sleep(86400)
 
 @app.on_event("startup")
 async def startup_event():
+    import asyncio
+    from services.websocket import manager
     manager.loop = asyncio.get_running_loop()
+    import threading
+    threading.Thread(target=schedule_daily_batch, daemon=True).start()
 
 # ─── Root Redirect ────────────────────────────────────────────────────────────
 @app.get("/", tags=["System"])
