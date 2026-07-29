@@ -69,7 +69,7 @@ export default function Dashboard() {
 
   async function loadDashboardData() {
     try {
-      setAiRunStatus("Live — Supabase Direct");
+      // Status shown via lastRefreshed timestamp set at end of load
 
       // 1. Fetch all transformers from the flat view (lat/lon as plain floats)
       const { data: transformers, error: trError } = await supabase
