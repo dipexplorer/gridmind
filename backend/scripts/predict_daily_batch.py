@@ -48,8 +48,16 @@ def run_batch_prediction():
         for idx, t in enumerate(transformers):
             try:
                 # Synthesize 24 hourly readings on-the-fly using weather & rated capacity
-                lat = float(t.latitude) if t.latitude else 26.14
-                lon = float(t.longitude) if t.longitude else 91.74
+                lat = 26.14
+                lon = 91.74
+                try:
+                    from geoalchemy2.shape import to_shape
+                    if t.location:
+                        point = to_shape(t.location)
+                        lat = float(point.y)
+                        lon = float(point.x)
+                except Exception:
+                    pass
                 ambient_temp = ai_service._fetch_live_weather(lat, lon)
                 
                 class SyntheticReading:
@@ -72,7 +80,7 @@ def run_batch_prediction():
                     voltage = random.uniform(380, 398) if load > 85 else random.uniform(405, 420)
                     
                     # Current is proportional to load
-                    base_current = (t.rated_kva * 1000) / (415 * 1.732) if t.rated_kva else 139.0
+                    base_current = (float(t.rated_kva) * 1000.0) / (415.0 * 1.732) if t.rated_kva else 139.0
                     current = base_current * (load / 100.0) + random.uniform(-5, 5)
                     
                     readings.append(SyntheticReading(temp, load, voltage, current))
