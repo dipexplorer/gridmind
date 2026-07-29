@@ -53,9 +53,10 @@ interface CombinedData extends Transformer, Partial<RiskScore> {
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [data, setData] = useState<CombinedData[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [aiRunStatus, setAiRunStatus] = useState<string>("Loading...");
+  const [lastRefreshed, setLastRefreshed] = useState<string>('Loading...');
   const [scanning, setScanning] = useState(false);
 
   // Filter States
@@ -115,10 +116,13 @@ export default function Dashboard() {
       setData(combined);
       const uniqueSubs = Array.from(new Set(combined.map(c => c.substation_name).filter(Boolean))) as string[];
       setSubstationsList(uniqueSubs);
+      setLastRefreshed(`Last synced: ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} IST`);
     } catch (err) {
       console.error("Dashboard data load failed", err);
+      setLastRefreshed('Sync failed — retrying...');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }
 
@@ -127,8 +131,8 @@ export default function Dashboard() {
   }, []);
 
   const triggerAIScan = async () => {
+    setRefreshing(true);
     setScanning(true);
-    // Re-fetch latest data from Supabase
     await loadDashboardData();
     setScanning(false);
   };
@@ -220,8 +224,19 @@ export default function Dashboard() {
             Predictive Health Monitoring Dashboard
           </p>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-xs font-semibold bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full">{aiRunStatus}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100 px-3 py-1.5 rounded-full flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block"></span>
+            {lastRefreshed}
+          </span>
+          <button
+            onClick={triggerAIScan}
+            disabled={refreshing || scanning}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white px-4 py-1.5 rounded-full text-xs font-bold transition-colors"
+          >
+            <Activity size={13} className={refreshing ? 'animate-spin' : ''} />
+            {refreshing ? 'Refreshing...' : 'Refresh Live Data'}
+          </button>
         </div>
       </div>
 
@@ -354,26 +369,26 @@ export default function Dashboard() {
           <div className="flex flex-col gap-2 mt-auto">
             <button 
               onClick={triggerAIScan}
-              disabled={scanning}
-              className="flex items-center justify-between bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-2 rounded-lg text-xs font-bold transition-colors w-full"
+              disabled={refreshing || scanning}
+              className="flex items-center justify-between bg-blue-50 hover:bg-blue-100 disabled:opacity-60 text-blue-700 px-3 py-2 rounded-lg text-xs font-bold transition-colors w-full"
             >
-              <span className="flex items-center gap-1.5"><Zap size={14} className={scanning ? 'animate-bounce' : ''} /> {scanning ? 'Scanning...' : 'Force AI Scan'}</span>
+              <span className="flex items-center gap-1.5"><Activity size={14} className={refreshing ? 'animate-spin' : ''} /> {refreshing ? 'Fetching...' : 'Refresh Live Data'}</span>
               <ArrowRight size={14} />
             </button>
             <button 
               onClick={() => {
-                const csvContent = "data:text/csv;charset=utf-8,Asset Code,Status,Risk\n" + filteredData.map(d => `${d.transformer_code},${d.operational_status},${d.risk_category}`).join("\n");
+                const csvContent = "data:text/csv;charset=utf-8,Asset Code,Status,Risk,Load%,District\n" + filteredData.map(d => `${d.transformer_code},${d.operational_status},${d.risk_category},${d.current_load_pct?.toFixed(1) || ''}%,${d.district || ''}`).join("\n");
                 const encodedUri = encodeURI(csvContent);
                 const link = document.createElement("a");
                 link.setAttribute("href", encodedUri);
-                link.setAttribute("download", `system_report_${new Date().toISOString().split('T')[0]}.csv`);
+                link.setAttribute("download", `gridmind_report_${new Date().toISOString().split('T')[0]}.csv`);
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
               }}
               className="flex items-center justify-between bg-slate-50 hover:bg-slate-100 text-slate-700 px-3 py-2 rounded-lg text-xs font-bold transition-colors w-full"
             >
-              <span className="flex items-center gap-1.5"><Download size={14} /> Export Report</span>
+              <span className="flex items-center gap-1.5"><Download size={14} /> Export CSV ({filteredData.length})</span>
               <ArrowRight size={14} />
             </button>
           </div>

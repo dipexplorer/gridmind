@@ -74,26 +74,8 @@ def fetch_proxy_data():
         time.sleep(2) # Politeness
         
     print(f"\nTotal proxy coordinates retrieved: {len(all_points)}")
+    # No artificial expansion — use only real OSM proxy points
     
-    # Expand points to simulate clusters of transformers (e.g., 4-5 transformers per tower/anchor)
-    if len(all_points) > 0 and len(all_points) < 1362:
-        print(f"Expanding points from {len(all_points)} to 1,362 via local spatial clustering (+/- 100m)...")
-        import random
-        original_points = list(all_points)
-        target = 1362
-        while len(all_points) < target:
-            anchor = random.choice(original_points)
-            # Perturb coordinates slightly (approx 50-120 meters)
-            lat_offset = random.uniform(-0.0009, 0.0009)
-            lon_offset = random.uniform(-0.0009, 0.0009)
-            all_points.append({
-                "lat": anchor["lat"] + lat_offset,
-                "lon": anchor["lon"] + lon_offset,
-                "name": f"{anchor['name']} Cluster Node",
-                "type": f"{anchor['type']}_cluster"
-            })
-        print(f"Expanded to {len(all_points)} points.")
-        
     # Save as JSON for caching / reference
     json_path = os.path.join(OUTPUT_DIR, "proxy_points.json")
     with open(json_path, "w", encoding="utf-8") as f:
@@ -106,8 +88,9 @@ def fetch_proxy_data():
         writer.writeheader()
         writer.writerows(all_points)
         
-    print(f"Saved to {csv_path} and {json_path}")
+    print(f"Saved {len(all_points)} real proxy points → {csv_path} and {json_path}")
     return all_points
+
 
 if __name__ == "__main__":
     fetch_proxy_data()
