@@ -317,6 +317,74 @@ class RealAIModel:
             return self._fallback_predict(transformer_id)
 
 
+    def predict_all_models(self, temp_c: float, load_pct: float, v_lv: float, curr_a: float) -> Dict[str, Any]:
+        """
+        Run inference using Isolation Forest, XGBoost, and Random Forest in parallel.
+        Returns anomaly scores and risk categories for each.
+        """
+        import pandas as pd
+        import numpy as np
+        
+        # Feature DataFrame
+        x = np.array([[temp_c, load_pct, v_lv, curr_a]])
+        df_x = pd.DataFrame(x, columns=self.features)
+        
+        results = {}
+        
+        # 1. Isolation Forest (Production)
+        if self.model is not None:
+            raw_score = self.model.decision_function(df_x)[0]
+            iforest_score = max(0.0, min(100.0, float(35 - (raw_score * 350))))
+        else:
+            iforest_score = 15.0
+            
+        results["isolation_forest"] = {
+            "anomaly_score": round(iforest_score, 1),
+            "risk_category": "CRITICAL" if iforest_score >= 90 else ("WARNING" if iforest_score >= 70 else "HEALTHY"),
+            "expected_lifetime_days": int((100 - iforest_score) * 36.5)
+        }
+        
+        # Helper to load models dynamically if not cached
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+        # 2. Random Forest
+        rf_score = 15.0
+        try:
+            rf_path = os.path.join(base_dir, "ml_models", "benchmark_random_forest.pkl")
+            if os.path.exists(rf_path):
+                rf_model = joblib.load(rf_path)
+                proba = rf_model.predict_proba(df_x)[0]  # [safe, warning, critical]
+                rf_score = float((1.0 - proba[0]) * 100.0)
+        except Exception as e:
+            logger.error(f"Failed RF prediction: {e}")
+            
+        results["random_forest"] = {
+            "anomaly_score": round(rf_score, 1),
+            "risk_category": "CRITICAL" if rf_score >= 90 else ("WARNING" if rf_score >= 70 else "HEALTHY"),
+            "expected_lifetime_days": int((100 - rf_score) * 36.5)
+        }
+        
+        # 3. XGBoost
+        xgb_score = 15.0
+        try:
+            xgb_path = os.path.join(base_dir, "ml_models", "benchmark_xgboost.pkl")
+            if not os.path.exists(xgb_path):
+                xgb_path = os.path.join(base_dir, "ml_models", "benchmark_gradient_boosting.pkl")
+            if os.path.exists(xgb_path):
+                xgb_model = joblib.load(xgb_path)
+                proba = xgb_model.predict_proba(df_x)[0]
+                xgb_score = float((1.0 - proba[0]) * 100.0)
+        except Exception as e:
+            logger.error(f"Failed XGB prediction: {e}")
+            
+        results["xgboost"] = {
+            "anomaly_score": round(xgb_score, 1),
+            "risk_category": "CRITICAL" if xgb_score >= 90 else ("WARNING" if xgb_score >= 70 else "HEALTHY"),
+            "expected_lifetime_days": int((100 - xgb_score) * 36.5)
+        }
+        
+        return results
+
     def _fallback_predict(self, transformer_id: str) -> Dict[str, Any]:
         """
         Mock fallback prediction service when ML models are missing or training failed.

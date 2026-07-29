@@ -27,7 +27,7 @@ interface DetailData {
 interface TSPoint { time: string; load_percentage: number; voltage_lv: number; current_a: number; temperature_c: number; }
 interface MLog { id: string; maintenance_date: string; maintenance_type: string; work_description?: string; findings?: string; oil_bdv_kv?: number; outcome: string; }
 interface ShapRow { feature_name: string; feature_value: number; shap_value: number; }
-interface Risk { anomaly_score: number; risk_category: string; expected_lifetime_days: number; }
+interface Risk { anomaly_score: number; risk_category: string; expected_lifetime_days: number; model_predictions?: any; }
 interface WeatherImpact { ambient_temperature_c: number; weather_penalty_percentage: number; is_hot_day: boolean; }
 
 const RISK_META: Record<string, { color: string; bg: string; border: string; glow: string; label: string }> = {
@@ -121,6 +121,7 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
   const [risk, setRisk]             = useState<Risk | null>(null);
   const [weather, setWeather]       = useState<WeatherImpact | null>(null);
   const [activeChart, setActiveChart] = useState<"load" | "temp" | "voltage" | "current">("load");
+  const [selectedModel, setSelectedModel] = useState<"isolation_forest" | "xgboost" | "random_forest">("isolation_forest");
 
   // Maintenance form
   const [mType, setMType]           = useState("OIL_FILTERATION");
@@ -240,7 +241,19 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
   }
 
   // ── Derived data ─────────────────────────────────────────────────────────────
-  const riskMeta = RISK_META[risk?.risk_category ?? "UNKNOWN"] ?? RISK_META.UNKNOWN;
+  // ── Derived data ─────────────────────────────────────────────────────────────
+  const currentRisk = React.useMemo(() => {
+    if (risk?.model_predictions && (risk.model_predictions as any)[selectedModel]) {
+      return (risk.model_predictions as any)[selectedModel];
+    }
+    return {
+      anomaly_score: risk?.anomaly_score ?? 0,
+      risk_category: risk?.risk_category ?? "UNKNOWN",
+      expected_lifetime_days: risk?.expected_lifetime_days ?? 365
+    };
+  }, [risk, selectedModel]);
+
+  const riskMeta = RISK_META[currentRisk.risk_category] ?? RISK_META.UNKNOWN;
   const latest   = timeseries[timeseries.length - 1] ?? { temperature_c: 0, load_percentage: 0, voltage_lv: 0, current_a: 0 };
   const formattedTS = timeseries.map(pt => ({
     ...pt,
@@ -265,8 +278,8 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
 
   // Risk score color for gauge
   const scoreColor =
-    (risk?.anomaly_score ?? 0) >= 90 ? "#ef4444" :
-    (risk?.anomaly_score ?? 0) >= 70 ? "#f59e0b" : "#10b981";
+    (currentRisk.anomaly_score) >= 90 ? "#ef4444" :
+    (currentRisk.anomaly_score) >= 70 ? "#f59e0b" : "#10b981";
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -275,16 +288,41 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
       <div className="bg-white border-b border-slate-100">
         <div className="max-w-7xl mx-auto px-8 py-5">
           {/* Breadcrumb */}
-          <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-4 font-medium">
-            <Link href="/dashboard" className="hover:text-slate-700 transition-colors flex items-center gap-1">
-              <LayoutDashboard size={12} /> Dashboard
-            </Link>
-            <ChevronRight size={12} />
-            <Link href="/assets" className="hover:text-slate-700 transition-colors flex items-center gap-1">
-              <Layers size={12} /> Assets
-            </Link>
-            <ChevronRight size={12} />
-            <span className="text-slate-600 font-bold">{detail.transformer_code}</span>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
+              <Link href="/dashboard" className="hover:text-slate-700 transition-colors flex items-center gap-1">
+                <LayoutDashboard size={12} /> Dashboard
+              </Link>
+              <ChevronRight size={12} />
+              <Link href="/assets" className="hover:text-slate-700 transition-colors flex items-center gap-1">
+                <Layers size={12} /> Assets
+              </Link>
+              <ChevronRight size={12} />
+              <span className="text-slate-600 font-bold">{detail.transformer_code}</span>
+            </div>
+
+            {/* Active Model Selector */}
+            {risk?.model_predictions && (
+              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl border border-slate-200/60 shadow-inner">
+                {[
+                  { id: "isolation_forest", label: "Isolation Forest (Prod)" },
+                  { id: "xgboost", label: "XGBoost (Supervised)" },
+                  { id: "random_forest", label: "Random Forest (Supervised)" }
+                ].map(m => (
+                  <button
+                    key={m.id}
+                    onClick={() => setSelectedModel(m.id as any)}
+                    className={`px-3 py-1 rounded-lg text-[10px] font-extrabold tracking-wide transition-all ${
+                      selectedModel === m.id
+                        ? "bg-white text-slate-800 shadow-sm border border-slate-200/10"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
@@ -294,7 +332,7 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
               <div className={`relative w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg ${riskMeta.glow} flex-shrink-0`}
                 style={{ background: `linear-gradient(135deg, ${scoreColor}22, ${scoreColor}44)`, border: `2px solid ${scoreColor}33` }}>
                 <Zap size={26} style={{ color: scoreColor }} />
-                {(risk?.risk_category === "CRITICAL" || risk?.risk_category === "WARNING") && (
+                {(currentRisk.risk_category === "CRITICAL" || currentRisk.risk_category === "WARNING") && (
                   <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 border-2 border-white animate-pulse" />
                 )}
               </div>
@@ -303,7 +341,7 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                 <div className="flex items-center gap-3 flex-wrap">
                   <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">{detail.transformer_code}</h1>
                   <span className={`inline-flex items-center gap-1.5 text-xs font-extrabold px-3 py-1 rounded-full border ${riskMeta.color} bg-white ${riskMeta.border}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${riskMeta.bg} ${risk?.risk_category === "CRITICAL" ? "animate-pulse" : ""}`} />
+                    <span className={`w-1.5 h-1.5 rounded-full ${riskMeta.bg} ${currentRisk.risk_category === "CRITICAL" ? "animate-pulse" : ""}`} />
                     {riskMeta.label} RISK
                   </span>
                   
@@ -337,10 +375,10 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
             <div className="bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-center min-w-[180px]">
               <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest mb-1">Expected Lifetime</p>
               <p className="text-3xl font-black text-slate-900 tracking-tight leading-none">
-                {risk?.expected_lifetime_days ?? "—"}
+                {currentRisk.expected_lifetime_days ?? "—"}
               </p>
               <p className="text-xs text-slate-400 font-medium mt-1">days remaining</p>
-              {risk?.expected_lifetime_days !== undefined && risk.expected_lifetime_days < 90 && (
+              {currentRisk.expected_lifetime_days !== undefined && currentRisk.expected_lifetime_days < 90 && (
                 <p className="mt-2 text-[10px] font-bold text-amber-600 flex items-center justify-center gap-1">
                   <CircleAlert size={10} /> Schedule maintenance
                 </p>
@@ -358,7 +396,7 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
           <StatBadge icon={Thermometer}  label="Oil Temperature" value={`${latest.temperature_c.toFixed(1)} °C`}     sub="Latest reading"  iconBg="bg-red-50 text-red-500"      trend={latest.temperature_c > 70 ? "up" : "neutral"} />
           <StatBadge icon={Gauge}        label="Load Factor"     value={`${latest.load_percentage.toFixed(1)}%`}     sub="Current load"    iconBg="bg-amber-50 text-amber-500"  trend={latest.load_percentage > 85 ? "up" : "neutral"} />
           <StatBadge icon={Cpu}          label="LV Voltage"      value={`${latest.voltage_lv.toFixed(0)} V`}         sub="At secondary"    iconBg="bg-blue-50 text-blue-500" />
-          <StatBadge icon={ShieldAlert}  label="Anomaly Score"   value={`${(risk?.anomaly_score ?? 0).toFixed(1)}%`} sub="AI risk index"   iconBg="bg-purple-50 text-purple-500" trend={(risk?.anomaly_score ?? 0) > 50 ? "up" : "down"} />
+          <StatBadge icon={ShieldAlert}  label="Anomaly Score"   value={`${(currentRisk.anomaly_score).toFixed(1)}%`} sub="AI risk index"   iconBg="bg-purple-50 text-purple-500" trend={(currentRisk.anomaly_score) > 50 ? "up" : "down"} />
         </div>
 
         {/* ── Main Grid (Charts + Sidebar) ───────────────────────────────────── */}
@@ -549,29 +587,29 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                 <div className="relative w-32 h-32 flex-shrink-0">
                   <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90">
                     <circle cx="60" cy="60" r="50" fill="none" stroke="#F1F5F9" strokeWidth="12" />
-                    {/* Total score arc (rendered FIRST so it sits underneath) */}
+                    {/* Total score arc */}
                     <circle cx="60" cy="60" r="50" fill="none" stroke={scoreColor} strokeWidth="12"
-                      strokeDasharray={`${2 * Math.PI * 50 * (risk?.anomaly_score ?? 0) / 100} ${2 * Math.PI * 50}`}
+                      strokeDasharray={`${2 * Math.PI * 50 * (currentRisk.anomaly_score) / 100} ${2 * Math.PI * 50}`}
                       strokeLinecap="round" className="transition-all duration-1000 ease-out" />
                       
-                    {/* Base score arc (blue) - rendered SECOND so it sits on top of the red arc */}
+                    {/* Base score arc */}
                     {weather && weather.weather_penalty_percentage > 0 && (
                       <circle cx="60" cy="60" r="50" fill="none" stroke="#60A5FA" strokeWidth="12"
-                        strokeDasharray={`${2 * Math.PI * 50 * Math.max(0, (risk?.anomaly_score ?? 0) - weather.weather_penalty_percentage) / 100} ${2 * Math.PI * 50}`}
+                        strokeDasharray={`${2 * Math.PI * 50 * Math.max(0, (currentRisk.anomaly_score) - weather.weather_penalty_percentage) / 100} ${2 * Math.PI * 50}`}
                         strokeLinecap="round" className="transition-all duration-1000 ease-out" />
                     )}
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center rotate-0">
-                    <span className="text-2xl font-black" style={{ color: scoreColor }}>{(risk?.anomaly_score ?? 0).toFixed(0)}</span>
+                    <span className="text-2xl font-black" style={{ color: scoreColor }}>{(currentRisk.anomaly_score).toFixed(0)}</span>
                     <span className="text-[10px] font-bold text-slate-400">/ 100</span>
                   </div>
                 </div>
                 {/* Tier explanations */}
                 <div className="flex-1 space-y-2.5">
                   {[
-                    { tier: "CRITICAL", range: "90–100", color: "bg-red-500",    active: (risk?.anomaly_score ?? 0) >= 90 },
-                    { tier: "WARNING",  range: "70–89",  color: "bg-amber-400",  active: (risk?.anomaly_score ?? 0) >= 70 && (risk?.anomaly_score ?? 0) < 90 },
-                    { tier: "HEALTHY",  range: "0–69",   color: "bg-emerald-500",active: (risk?.anomaly_score ?? 0) < 70 },
+                    { tier: "CRITICAL", range: "90–100", color: "bg-red-500",    active: (currentRisk.anomaly_score) >= 90 },
+                    { tier: "WARNING",  range: "70–89",  color: "bg-amber-400",  active: (currentRisk.anomaly_score) >= 70 && (currentRisk.anomaly_score) < 90 },
+                    { tier: "HEALTHY",  range: "0–69",   color: "bg-emerald-500",active: (currentRisk.anomaly_score) < 70 },
                   ].map(r => (
                     <div key={r.tier} className={`flex items-center gap-3 py-2 px-3 rounded-xl transition-all ${r.active ? "bg-slate-50 ring-1 ring-slate-200" : "opacity-40"}`}>
                       <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${r.color}`} />
@@ -583,7 +621,7 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                 </div>
               </div>
 
-              {/* Weather Factor Breakdown — shows only when weather data is available */}
+              {/* Weather Factor Breakdown */}
               {weather && (
                 <div className={`mt-5 pt-5 border-t border-slate-100 rounded-2xl p-4 ${weather.weather_penalty_percentage > 0 ? "bg-orange-50 border border-orange-100" : "bg-emerald-50 border border-emerald-100"}`}>
                   <p className={`text-[10px] font-extrabold uppercase tracking-widest mb-3 ${weather.weather_penalty_percentage > 0 ? "text-orange-600" : "text-emerald-600"}`}>
@@ -595,10 +633,10 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                       <div className="flex items-center gap-2">
                         <span className="w-2.5 h-2.5 rounded-full bg-blue-400 flex-shrink-0" />
                         <span className="text-slate-600 font-semibold">Base AI Score</span>
-                        <span className="text-slate-400 text-[10px]">(Isolation Forest model)</span>
+                        <span className="text-slate-400 text-[10px]">({selectedModel === "isolation_forest" ? "Isolation Forest" : selectedModel === "xgboost" ? "XGBoost" : "Random Forest"} model)</span>
                       </div>
                       <span className="font-extrabold text-slate-800">
-                        {Math.max(0, (risk?.anomaly_score ?? 0) - weather.weather_penalty_percentage).toFixed(1)}
+                        {Math.max(0, (currentRisk.anomaly_score) - weather.weather_penalty_percentage).toFixed(1)}
                       </span>
                     </div>
                     {/* Weather penalty row */}
@@ -617,7 +655,7 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                     {/* Divider & total */}
                     <div className="border-t border-slate-200 pt-2 flex items-center justify-between text-xs">
                       <span className="font-extrabold text-slate-700">= Final Risk Score</span>
-                      <span className="font-black text-base" style={{ color: scoreColor }}>{(risk?.anomaly_score ?? 0).toFixed(1)}</span>
+                      <span className="font-black text-base" style={{ color: scoreColor }}>{(currentRisk.anomaly_score).toFixed(1)}</span>
                     </div>
                   </div>
                   {weather.weather_penalty_percentage > 0 && (

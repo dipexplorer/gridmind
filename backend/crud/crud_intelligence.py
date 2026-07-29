@@ -44,6 +44,19 @@ def get_transformer_score(db: Session, transformer_id: str):
                 cat = "HEALTHY"
                 lifetime_days = 365
             
+        # Call on-the-fly predictions for all models
+        from services.ai_service import ai_service
+        temp_c = float(transformer.current_oil_temp_c) if transformer.current_oil_temp_c is not None else 45.0
+        load_pct = float(transformer.current_load_pct) if transformer.current_load_pct is not None else 50.0
+        
+        import random
+        random.seed(transformer.id.bytes)
+        v_lv = random.uniform(380, 398) if load_pct > 85 else random.uniform(405, 420)
+        base_current = (float(transformer.rated_kva) * 1000.0) / (415.0 * 1.732) if transformer.rated_kva else 139.0
+        curr_a = base_current * (load_pct / 100.0) + random.uniform(-2, 2)
+        
+        preds = ai_service.predict_all_models(temp_c, load_pct, v_lv, curr_a)
+        
         import uuid
         return {
             "id": str(uuid.uuid4()),
@@ -54,7 +67,8 @@ def get_transformer_score(db: Session, transformer_id: str):
             "expected_lifetime_days": lifetime_days,
             "confidence_interval_lower": 0,
             "confidence_interval_upper": 100,
-            "calculated_at": transformer.last_updated or datetime.now(timezone.utc)
+            "calculated_at": transformer.last_updated or datetime.now(timezone.utc),
+            "model_predictions": preds
         }
     return None
 

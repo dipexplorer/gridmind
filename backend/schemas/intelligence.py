@@ -26,6 +26,7 @@ class TransformerScoreResponse(TransformerScoreBase):
     transformer_id: uuid.UUID
     run_id: uuid.UUID
     calculated_at: datetime
+    model_predictions: Optional[Dict[str, Any]] = None
     
     model_config = ConfigDict(from_attributes=True)
 
