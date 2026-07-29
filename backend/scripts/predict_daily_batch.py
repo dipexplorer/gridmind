@@ -22,7 +22,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.database import SessionLocal
 from models.asset import Transformer
-from models.intelligence import TransformerScore, ShapExplanation, ScoreRunMetadata
 from services.ai_service import ai_service
 
 # Configure logging
@@ -42,11 +41,6 @@ def run_batch_prediction():
         if not transformers:
             logger.warning("No transformers found in database. Terminating.")
             return
-
-        run_id = str(uuid.uuid4())
-        run_meta = ScoreRunMetadata(id=run_id, status="RUNNING")
-        db.add(run_meta)
-        db.commit()
 
         anomalies_detected = 0
         updated_count = 0
@@ -101,28 +95,6 @@ def run_batch_prediction():
                 t.current_oil_temp_c = pred.get("avg_temp_c", t.current_oil_temp_c)
                 t.last_updated = datetime.now(timezone.utc)
 
-                # Log score history for analytics/detail screens
-                score = TransformerScore(
-                    transformer_id=t.id,
-                    run_id=run_id,
-                    anomaly_score=anomaly_score,
-                    risk_category=risk_category,
-                    expected_lifetime_days=pred["expected_lifetime_days"],
-                    confidence_interval_lower=pred["confidence_interval_lower"],
-                    confidence_interval_upper=pred["confidence_interval_upper"]
-                )
-                db.add(score)
-                db.flush()
-
-                # Save SHAP feature explainability lists
-                for sv in shap_values:
-                    db.add(ShapExplanation(
-                        score_id=score.id,
-                        feature_name=sv["feature_name"],
-                        feature_value=sv["feature_value"],
-                        shap_value=sv["shap_value"]
-                    ))
-
                 if risk_category in ("HIGH", "CRITICAL"):
                     anomalies_detected += 1
                 updated_count += 1
@@ -136,12 +108,6 @@ def run_batch_prediction():
                 logger.error(f"Failed to process transformer {t.transformer_code}: {tr_err}")
                 db.rollback()
 
-        db.commit()
-
-        # Update run metadata
-        run_meta.status = "COMPLETED"
-        run_meta.completed_at = datetime.now(timezone.utc)
-        run_meta.anomalies_detected = anomalies_detected
         db.commit()
 
         logger.info(f"Daily batch run completed successfully. Updated {updated_count} transformers. Detected {anomalies_detected} anomalies.")
