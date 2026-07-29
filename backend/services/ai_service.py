@@ -157,6 +157,7 @@ class RealAIModel:
 
             # 4. Compute SHAP explainability
             # TreeExplainer calculates shapley values for the decision function
+            assert self.explainer is not None
             shap_vals = self.explainer.shap_values(df_x)[0]
             
             # Pack SHAP values to fit schemas.intelligence.ShapExplanationResponse
@@ -242,6 +243,7 @@ class RealAIModel:
             # Compute SHAP values on daily averages for 24x speedup
             mean_features = df.mean()
             df_mean = pd.DataFrame([mean_features.values], columns=self.features)
+            assert self.explainer is not None
             shap_vals = self.explainer.shap_values(df_mean)[0]
 
             shap_list = []

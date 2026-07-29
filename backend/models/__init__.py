@@ -19,7 +19,6 @@ __all__ = [
     "ScoreRunMetadata",
     "TransformerScore",
     "ShapExplanation",
-    "ModelRegistry",
     "Notification"
 ]
 
