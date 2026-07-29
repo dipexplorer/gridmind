@@ -92,7 +92,7 @@ class RealAIModel:
         Falls back to safe simulation if models are not generated yet.
         """
         # If models are not loaded, fallback to mock simulator
-        if self.model is None or self.survival_model is None:
+        if self.model is None or self.survival_model is None or self.explainer is None:
             return self._fallback_predict(transformer_id)
 
         db = SessionLocal()
@@ -202,6 +202,86 @@ class RealAIModel:
             return self._fallback_predict(transformer_id)
         finally:
             db.close()
+
+    def predict_daily_health(self, transformer_id: str, readings: list) -> Dict[str, Any]:
+        """
+        Performs batch inference over 24 hours of telemetry readings.
+        Calculates daily average metrics and runs ML models on daily aggregated values.
+        """
+        if self.model is None or self.survival_model is None or not readings:
+            return self._fallback_predict(transformer_id)
+
+        try:
+            # Extract features from all readings
+            data = []
+            for r in readings:
+                temp_c = float(r.temperature_c) if r.temperature_c is not None else 40.0
+                load_pct = float(r.load_percentage) if r.load_percentage is not None else 45.0
+                v_lv = float(r.voltage_lv) if r.voltage_lv is not None else 415.0
+                curr_a = float(r.current_a) if r.current_a is not None else 60.0
+                data.append([temp_c, load_pct, v_lv, curr_a])
+
+            df = pd.DataFrame(data, columns=self.features)
+
+            # Predict anomaly scores for all hours
+            raw_scores = self.model.decision_function(df)
+            anomaly_scores = 35 - (raw_scores * 200)
+
+            # Average daily anomaly score
+            daily_anomaly_score = float(np.mean(anomaly_scores))
+            daily_anomaly_score = max(0.0, min(100.0, daily_anomaly_score))
+
+            # Categorize Risk
+            if daily_anomaly_score >= 90:
+                category = "CRITICAL"
+            elif daily_anomaly_score >= 70:
+                category = "WARNING"
+            else:
+                category = "HEALTHY"
+
+            # Compute SHAP values on daily averages for 24x speedup
+            mean_features = df.mean()
+            df_mean = pd.DataFrame([mean_features.values], columns=self.features)
+            shap_vals = self.explainer.shap_values(df_mean)[0]
+
+            shap_list = []
+            for i, name in enumerate(self.features):
+                shap_list.append({
+                    "feature_name": name,
+                    "feature_value": round(float(mean_features[name]), 2),
+                    "shap_value": round(float(shap_vals[i]), 4)
+                })
+
+            # Predict Expected Life remaining (Cox Proportional Hazards) using daily averages
+            avg_temp = float(mean_features["temperature_c"])
+            avg_load = float(mean_features["load_percentage"])
+            surv_x = pd.DataFrame([[avg_temp, avg_load]], columns=["temperature_c", "load_percentage"])
+
+            try:
+                median_life = self.survival_model.predict_median(surv_x)
+                expected_lifetime_days = float(median_life.iloc[0])
+                if np.isinf(expected_lifetime_days) or np.isnan(expected_lifetime_days):
+                    expected_lifetime_days = int((100 - daily_anomaly_score) * 36.5)
+                else:
+                    expected_lifetime_days = int(expected_lifetime_days)
+            except Exception:
+                expected_lifetime_days = int((100 - daily_anomaly_score) * 36.5)
+
+            return {
+                "transformer_id": transformer_id,
+                "anomaly_score": round(daily_anomaly_score, 2),
+                "risk_category": category,
+                "expected_lifetime_days": expected_lifetime_days,
+                "confidence_interval_lower": max(0, expected_lifetime_days - 30),
+                "confidence_interval_upper": expected_lifetime_days + 30,
+                "shap_values": shap_list,
+                "avg_load_pct": avg_load,
+                "avg_temp_c": avg_temp
+            }
+        except Exception as e:
+            logger.error(f"Error during daily batch AI inference: {e}")
+            return self._fallback_predict(transformer_id)
+
 
     def _fallback_predict(self, transformer_id: str) -> Dict[str, Any]:
         """

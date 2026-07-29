@@ -30,19 +30,3 @@ class Notification(Base, UUIDMixin):
     
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
 
-class AuditLog(Base, UUIDMixin):
-    __tablename__ = "audit_log"
-
-    user_id: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
-    
-    action: Mapped[str] = mapped_column(String(64), nullable=False)
-    resource_type: Mapped[Optional[str]] = mapped_column(String(64))
-    resource_id: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=True))
-    
-    old_values: Mapped[Optional[dict]] = mapped_column(JSONB)
-    new_values: Mapped[Optional[dict]] = mapped_column(JSONB)
-    
-    ip_address: Mapped[Optional[Union[IPv4Address, IPv6Address]]] = mapped_column(INET)
-    user_agent: Mapped[Optional[str]] = mapped_column(Text)
-    
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)

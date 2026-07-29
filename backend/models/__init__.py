@@ -4,7 +4,7 @@ from .asset import Substation, Feeder, Transformer
 from .event import MaintenanceLog, FailureEvent
 from .timeseries import Complaint, LoadReading
 from .intelligence import ScoreRunMetadata, TransformerScore, ShapExplanation
-from .notification import Notification, AuditLog
+from .notification import Notification
 
 __all__ = [
     "Base",
@@ -20,6 +20,6 @@ __all__ = [
     "TransformerScore",
     "ShapExplanation",
     "ModelRegistry",
-    "Notification",
-    "AuditLog"
+    "Notification"
 ]
+
