@@ -3,7 +3,6 @@ from .user import User
 from .asset import Substation, Feeder, Transformer
 from .event import MaintenanceLog, FailureEvent
 from .timeseries import Complaint
-from .intelligence import ScoreRunMetadata, TransformerScore, ShapExplanation
 from .notification import Notification
 
 __all__ = [
@@ -15,9 +14,6 @@ __all__ = [
     "MaintenanceLog",
     "FailureEvent",
     "Complaint",
-    "ScoreRunMetadata",
-    "TransformerScore",
-    "ShapExplanation",
     "Notification"
 ]
 
