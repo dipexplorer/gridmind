@@ -136,14 +136,22 @@ class RealAIModel:
             # Map raw score to 0-100 percentage (where 100 is highly anomalous)
             # Normal data usually has raw_score > 0 (e.g. 0.1 to 0.3)
             # Anomalies have raw_score < 0
-            anomaly_score = 35 - (raw_score * 200)
+            anomaly_score = 35 - (raw_score * 350)
 
             # LIVE WEATHER INTEGRATION (Phase 1)
             # Fetch transformer coordinates to get ambient temperature
             from models.asset import Transformer
             transformer = db.query(Transformer).filter(Transformer.id == transformer_id).first()
-            lat = float(transformer.latitude) if transformer and transformer.latitude else 0.0
-            lon = float(transformer.longitude) if transformer and transformer.longitude else 0.0
+            lat = 26.14
+            lon = 91.74
+            try:
+                from geoalchemy2.shape import to_shape
+                if transformer and transformer.location:
+                    point = to_shape(transformer.location)
+                    lat = float(point.y)
+                    lon = float(point.x)
+            except Exception:
+                pass
 
             ambient_temp = self._fetch_live_weather(lat, lon)
             
@@ -235,7 +243,7 @@ class RealAIModel:
 
             # Predict anomaly scores for all hours
             raw_scores = self.model.decision_function(df)
-            anomaly_scores = 35 - (raw_scores * 200)
+            anomaly_scores = 35 - (raw_scores * 350)
 
             # Average daily anomaly score
             daily_anomaly_score = float(np.mean(anomaly_scores))
