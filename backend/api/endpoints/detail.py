@@ -57,12 +57,32 @@ def get_transformer_detail(id: uuid.UUID, db: Session = Depends(get_db)):
 @router.get("/transformers/{id}/timeseries", response_model=List[Dict[str, Any]])
 def get_transformer_timeseries(id: uuid.UUID, db: Session = Depends(get_db)):
     """
-    Generate latest 24 load and temperature readings for a transformer on-the-fly.
+    Generate latest 24 load and temperature readings for a transformer.
+    Reads from the memory-cached telemetry dataset with a dynamic simulation fallback.
     """
     tx = db.query(Transformer).filter(Transformer.id == id).first()
     if not tx:
         raise HTTPException(status_code=404, detail="Transformer not found")
 
+    from services.data_cache import get_telemetry_history
+    history_df = get_telemetry_history(str(id))
+    
+    if not history_df.empty:
+        readings = []
+        for _, row in history_df.iterrows():
+            readings.append({
+                "id": str(uuid.uuid4()),
+                "transformer_id": str(id),
+                "time": row["timestamp"],
+                "load_percentage": float(row["load_percentage"]),
+                "voltage_lv": float(row["voltage_lv"]),
+                "current_a": float(row["current_a"]),
+                "temperature_c": float(row["temperature_c"]),
+                "source": "STATIC_CSV"
+            })
+        return readings
+
+    # Fallback to simulation if cache is empty
     from services.ai_service import ai_service
     lat = 26.14
     lon = 91.74
@@ -82,7 +102,6 @@ def get_transformer_timeseries(id: uuid.UUID, db: Session = Depends(get_db)):
     now = datetime.now(timezone.utc)
     readings = []
     
-    # Check if this transformer is anomalous based on database status
     status = (tx.current_status or "").lower()
     is_critical = status == "critical"
     is_warning = status == "warning"
@@ -91,22 +110,18 @@ def get_transformer_timeseries(id: uuid.UUID, db: Session = Depends(get_db)):
         time_pt = now - timedelta(hours=(23 - h))
         hour = time_pt.hour
         
-        # Use a stable seed per hour and transformer to keep telemetry consistent across requests
         seed_str = f"{id}_{time_pt.strftime('%Y%m%d%H')}"
         local_random = random.Random(seed_str)
         
         if is_critical:
-            # Critical status: Simulate high load, high temperature, low voltage
             temp = ambient_temp + local_random.uniform(55, 75)
             load = local_random.uniform(105, 135)
             voltage = local_random.uniform(350, 375)
         elif is_warning:
-            # Warning status: Moderate abnormalities
             temp = ambient_temp + local_random.uniform(35, 55)
             load = local_random.uniform(85, 110)
             voltage = local_random.uniform(370, 395)
         else:
-            # Healthy status: Normal cycles
             temp_offset = local_random.uniform(5, 12) if 11 <= hour <= 16 else local_random.uniform(0, 4)
             temp = ambient_temp + temp_offset + local_random.uniform(-1, 1)
             load = local_random.uniform(40, 80)
@@ -197,11 +212,25 @@ def get_transformer_shap_explanations(id: uuid.UUID, db: Session = Depends(get_d
 def get_transformer_score_history(id: uuid.UUID, db: Session = Depends(get_db)):
     """
     Fetch the historical health/anomaly scores for a specific transformer.
-    Generates a realistic, stable 7-day trend dynamically based on the current score.
+    Reads from the memory-cached health trend dataset with a stable fallback.
     """
     tx = db.query(Transformer).filter(Transformer.id == id).first()
     if not tx:
         raise HTTPException(status_code=404, detail="Transformer not found")
+
+    from services.data_cache import get_trend_history
+    trend_df = get_trend_history(str(id))
+    
+    if not trend_df.empty:
+        history = []
+        for _, row in trend_df.iterrows():
+            history.append({
+                "id": str(uuid.uuid4()),
+                "anomaly_score": float(row["anomaly_score"]),
+                "health_score": int(row["health_score"]),
+                "calculated_at": row["timestamp"]
+            })
+        return history
         
     current_anomaly = float(tx.current_failure_risk * 100.0) if tx.current_failure_risk is not None else 15.0
     
@@ -230,9 +259,39 @@ def get_transformer_score_history(id: uuid.UUID, db: Session = Depends(get_db)):
 def get_transformer_forecast(id: uuid.UUID, db: Session = Depends(get_db)):
     """
     Generate a 24-hour future load forecast for a transformer.
-    (Phase 2 feature: Time-Series Prediction)
+    Uses a live forward pass of the PyTorch LSTM model.
     """
     tx = db.query(Transformer).filter(Transformer.id == id).first()
+    if not tx:
+        raise HTTPException(status_code=404, detail="Transformer not found")
+
+    from services.data_cache import get_telemetry_history
+    from services.deep_learning import predict_lstm_forecast
+    import numpy as np
+
+    history_df = get_telemetry_history(str(id))
+    if not history_df.empty and len(history_df) >= 24:
+        # Extract features of past 24 hours: [temperature_c, load_percentage, voltage_lv, current_a]
+        past_seq = history_df[["temperature_c", "load_percentage", "voltage_lv", "current_a"]].values[-24:]
+        forecast_preds = predict_lstm_forecast(past_seq) # shape (24, 2)
+        
+        from datetime import datetime, timezone, timedelta
+        now = datetime.now(timezone.utc)
+        forecast = []
+        for h in range(1, 25):
+            future_time = now + timedelta(hours=h)
+            pred_load = float(forecast_preds[h-1, 0])
+            pred_temp = float(forecast_preds[h-1, 1])
+            forecast.append({
+                "time": future_time.isoformat(),
+                "predicted_load_percentage": round(pred_load, 2),
+                "predicted_temperature_c": round(pred_temp, 1),
+                "confidence_lower": max(0.0, round(pred_load * 0.85, 2)),
+                "confidence_upper": min(150.0, round(pred_load * 1.15, 2))
+            })
+        return forecast
+
+    # Fallback if telemetry cache is not populated
     base_load = float(tx.current_load_pct) if tx and tx.current_load_pct is not None else 45.0
     from datetime import datetime, timezone, timedelta
     import random
@@ -242,17 +301,16 @@ def get_transformer_forecast(id: uuid.UUID, db: Session = Depends(get_db)):
     
     for h in range(1, 25):
         future_time = now + timedelta(hours=h)
-        # Simple cyclic logic: peak loads in the evening (18-22)
         hour_of_day = future_time.hour
         peak_factor = 1.2 if 18 <= hour_of_day <= 22 else (0.8 if 2 <= hour_of_day <= 6 else 1.0)
         
-        # Add some random walk noise
         base_load = base_load * 0.90 + (random.uniform(40, 80) * 0.10)
         pred_load = min(150.0, max(0.0, base_load * peak_factor + random.uniform(-3, 3)))
         
         forecast.append({
             "time": future_time.isoformat(),
             "predicted_load_percentage": round(pred_load, 2),
+            "predicted_temperature_c": round(tx.current_oil_temp_c or 45.0, 1),
             "confidence_lower": max(0, round(pred_load * 0.85, 2)),
             "confidence_upper": min(150, round(pred_load * 1.15, 2))
         })

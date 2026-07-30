@@ -45,56 +45,26 @@ logger = logging.getLogger(__name__)
 
 # ─── Step 1: Synthetic Labeled Dataset Generation ─────────────────────────────
 
-def generate_labeled_dataset(n_samples: int = 5000, random_state: int = 42) -> tuple:
+def generate_labeled_dataset(n_samples: int = 10000, random_state: int = 42) -> tuple:
     """
-    Generates a synthetic SCADA telemetry dataset with known failure labels.
-
-    Why synthetic? We do not have 10 years of APDCL labeled failure history.
-    The physics-based rules below mirror real transformer failure conditions:
-      - Thermal degradation: temp > 85°C + load > 90% → HIGH risk
-      - Insulation failure:  temp > 90°C + voltage drop  → CRITICAL
-      - Normal operation:    temp < 65°C + load < 75%   → LOW/SAFE
-
-    Returns:
-        X (np.ndarray): Feature matrix of shape (n_samples, 4)
-        y (np.ndarray): Labels — 0=SAFE, 1=WARNING, 2=CRITICAL
-        feature_names (list): Names of the 4 input features
+    Loads the static labeled SCADA telemetry dataset from backend/data/ml_training_dataset.csv.
     """
-    np.random.seed(random_state)
-
-    # Generate base telemetry with realistic ranges
-    temp_c       = np.random.uniform(30.0, 110.0, n_samples)
-    load_pct     = np.random.uniform(15.0, 140.0, n_samples)
-    voltage_lv   = np.random.uniform(350.0, 430.0, n_samples)
-    current_a    = np.random.uniform(20.0, 400.0, n_samples)
-
-    # Physics-based label assignment (simulates engineering domain knowledge)
-    labels = np.zeros(n_samples, dtype=int)  # Default: SAFE (0)
-
-    warning_mask = (
-        (temp_c > 70) & (temp_c <= 85) |
-        (load_pct > 80) & (load_pct <= 95) |
-        (voltage_lv < 385)
-    )
-    critical_mask = (
-        ((temp_c > 85) & (load_pct > 90)) |
-        ((temp_c > 90) & (voltage_lv < 380)) |
-        (load_pct > 110)
-    )
-
-    labels[warning_mask]  = 1  # WARNING
-    labels[critical_mask] = 2  # CRITICAL
-
-    # Add realistic noise to prevent perfect separation (real-world variance)
-    noise_flip_idx = np.random.choice(n_samples, size=int(n_samples * 0.03), replace=False)
-    labels[noise_flip_idx] = np.random.randint(0, 3, size=len(noise_flip_idx))
-
-    X = np.column_stack([temp_c, load_pct, voltage_lv, current_a])
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    csv_path = os.path.join(base_dir, "data", "ml_training_dataset.csv")
+    if not os.path.exists(csv_path):
+        raise FileNotFoundError(f"ML training dataset not found at {csv_path}. Run generate_datasets.py first.")
+    
+    df = pd.read_csv(csv_path)
+    if n_samples and n_samples < len(df):
+        df = df.sample(n=n_samples, random_state=random_state)
+        
+    X = df[["temperature_c", "load_percentage", "voltage_lv", "current_a"]].values
+    y = df["risk_label"].values
     feature_names = ["temperature_c", "load_percentage", "voltage_lv", "current_a"]
-
-    logger.info(f"Generated {n_samples} samples: "
-                f"SAFE={sum(labels==0)}, WARNING={sum(labels==1)}, CRITICAL={sum(labels==2)}")
-    return X, labels, feature_names
+    
+    logger.info(f"Loaded {len(df)} training samples from CSV: "
+                f"SAFE={sum(y==0)}, WARNING={sum(y==1)}, CRITICAL={sum(y==2)}")
+    return X, y, feature_names
 
 
 # ─── Step 2: Define all 5 Benchmark Models ────────────────────────────────────
@@ -153,7 +123,7 @@ def run_benchmark(save_path: str = "ml_models/benchmark_results.json") -> dict:
     logger.info("=== GridMind ML Benchmark Starting ===")
 
     # Step 1: Generate data
-    X, y, feature_names = generate_labeled_dataset(n_samples=5000)
+    X, y, feature_names = generate_labeled_dataset(n_samples=10000)
 
     # Step 2: Train-test split (80% train, 20% test)
     X_train, X_test, y_train, y_test = train_test_split(
@@ -234,7 +204,7 @@ def run_benchmark(save_path: str = "ml_models/benchmark_results.json") -> dict:
     # ─── Final Report
     report = {
         "summary": {
-            "total_samples":    5000,
+            "total_samples":    len(X),
             "train_samples":    len(X_train),
             "test_samples":     len(X_test),
             "feature_names":    feature_names,

@@ -44,51 +44,60 @@ def get_transformer_score(db: Session, transformer_id: str):
                 cat = "HEALTHY"
                 lifetime_days = 365
             
-        # Generate the latest reading matching the timeseries simulation deterministically
-        from datetime import datetime, timezone
-        from services.ai_service import ai_service
-        now = datetime.now(timezone.utc)
+        # Try to read latest telemetry snapshot from data cache (Step 7)
+        from services.data_cache import get_latest_telemetry
+        latest_read = get_latest_telemetry(transformer_id)
         
-        # Calculate ambient temperature (same logic as detail.py)
-        lat = 26.14
-        lon = 91.74
-        try:
-            from geoalchemy2.shape import to_shape
-            if transformer.location:
-                point = to_shape(transformer.location)
-                lat = float(point.y)
-                lon = float(point.x)
-        except Exception:
-            pass
-        ambient_temp = ai_service._fetch_live_weather(lat, lon)
-        
-        status_str = (transformer.current_status or "").lower()
-        is_critical = status_str == "critical"
-        is_warning = status_str == "warning"
-        
-        # Seed with transformer ID and current hour's timestamp (rounded to hour)
-        seed_str = f"{transformer_id}_{now.strftime('%Y%m%d%H')}"
-        import random
-        local_random = random.Random(seed_str)
-        
-        if is_critical:
-            temp_c = ambient_temp + local_random.uniform(55, 75)
-            load_pct = local_random.uniform(105, 135)
-            v_lv = local_random.uniform(350, 375)
-        elif is_warning:
-            temp_c = ambient_temp + local_random.uniform(35, 55)
-            load_pct = local_random.uniform(85, 110)
-            v_lv = local_random.uniform(370, 395)
+        if latest_read:
+            temp_c = float(latest_read["temperature_c"])
+            load_pct = float(latest_read["load_percentage"])
+            v_lv = float(latest_read["voltage_lv"])
+            curr_a = float(latest_read["current_a"])
         else:
-            hour = now.hour
-            temp_offset = local_random.uniform(5, 12) if 11 <= hour <= 16 else local_random.uniform(0, 4)
-            temp_c = ambient_temp + temp_offset + local_random.uniform(-1, 1)
-            load_pct = local_random.uniform(40, 80)
-            v_lv = local_random.uniform(405, 420)
+            # Fallback based on seed if cache is empty
+            from services.ai_service import ai_service
+            lat = 26.14
+            lon = 91.74
+            try:
+                from geoalchemy2.shape import to_shape
+                if transformer.location:
+                    point = to_shape(transformer.location)
+                    lat = float(point.y)
+                    lon = float(point.x)
+            except Exception:
+                pass
+            ambient_temp = ai_service._fetch_live_weather(lat, lon)
             
-        base_current = (float(transformer.rated_kva) * 1000.0) / (415.0 * 1.732) if transformer.rated_kva else 139.0
-        curr_a = base_current * (load_pct / 100.0) + local_random.uniform(-5, 5)
+            status_str = (transformer.current_status or "").lower()
+            is_critical = status_str == "critical"
+            is_warning = status_str == "warning"
+            
+            # Seed with transformer ID and current hour's timestamp (rounded to hour)
+            from datetime import datetime
+            now = datetime.now(timezone.utc)
+            seed_str = f"{transformer_id}_{now.strftime('%Y%m%d%H')}"
+            import random
+            local_random = random.Random(seed_str)
+            
+            if is_critical:
+                temp_c = ambient_temp + local_random.uniform(55, 75)
+                load_pct = local_random.uniform(105, 135)
+                v_lv = local_random.uniform(350, 375)
+            elif is_warning:
+                temp_c = ambient_temp + local_random.uniform(35, 55)
+                load_pct = local_random.uniform(85, 110)
+                v_lv = local_random.uniform(370, 395)
+            else:
+                hour = now.hour
+                temp_offset = local_random.uniform(5, 12) if 11 <= hour <= 16 else local_random.uniform(0, 4)
+                temp_c = ambient_temp + temp_offset + local_random.uniform(-1, 1)
+                load_pct = local_random.uniform(40, 80)
+                v_lv = local_random.uniform(405, 420)
+                
+            base_current = (float(transformer.rated_kva) * 1000.0) / (415.0 * 1.732) if transformer.rated_kva else 139.0
+            curr_a = base_current * (load_pct / 100.0) + local_random.uniform(-5, 5)
         
+        from services.ai_service import ai_service
         preds = ai_service.predict_all_models(temp_c, load_pct, v_lv, curr_a)
         
         # Isolation Forest (Prod Final) should always match the actual database values to ensure

@@ -66,6 +66,15 @@ async def startup_event():
     import asyncio
     from services.websocket import manager
     manager.loop = asyncio.get_running_loop()
+    
+    # Load telemetry and health trend caches
+    from services.data_cache import load_data_caches
+    load_data_caches()
+    
+    # Pre-load PyTorch LSTM inference engine
+    from services.deep_learning import get_lstm_inference_engine
+    get_lstm_inference_engine()
+    
     import threading
     threading.Thread(target=schedule_daily_batch, daemon=True).start()
 

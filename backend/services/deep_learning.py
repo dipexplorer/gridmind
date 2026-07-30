@@ -176,6 +176,76 @@ def generate_lstm_sequences(n_sequences: int = 2000, seq_len: int = 24,
 # TRAINING FUNCTIONS
 # ═══════════════════════════════════════════════════════════════════════════════
 
+_lstm_model_cache = None
+_lstm_norm_cache = None
+
+def get_lstm_inference_engine():
+    global _lstm_model_cache, _lstm_norm_cache
+    if _lstm_model_cache is None:
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        model_path = os.path.join(base_dir, "ml_models", "lstm_forecaster.pt")
+        norm_path = os.path.join(base_dir, "ml_models", "lstm_normalization.pkl")
+        
+        if os.path.exists(model_path) and os.path.exists(norm_path):
+            try:
+                model = LSTMForecaster().to(DEVICE)
+                model.load_state_dict(torch.load(model_path, map_location=DEVICE))
+                model.eval()
+                _lstm_model_cache = model
+                _lstm_norm_cache = joblib.load(norm_path)
+                logger.info("Loaded PyTorch LSTM Forecaster model weights and normalization parameters.")
+            except Exception as e:
+                logger.error(f"Error loading LSTM model weights: {e}", exc_info=True)
+        else:
+            logger.warning(f"LSTM model or normalization pickle missing at {model_path}. Forecasts will use mathematical fallbacks.")
+    return _lstm_model_cache, _lstm_norm_cache
+
+def predict_lstm_forecast(past_sequence_24h: np.ndarray) -> np.ndarray:
+    """
+    Takes a sequence of shape (24, 4) representing [temp, load, voltage, current] of past 24 hours.
+    Returns forecasted next 24 hours sequence of shape (24, 2) representing [load_pct, temp_c].
+    """
+    model, norm = get_lstm_inference_engine()
+    if model is None or norm is None:
+        # Fallback cyclic forecast if weights aren't trained
+        forecast = []
+        base_load = past_sequence_24h[-1, 1]
+        base_temp = past_sequence_24h[-1, 0]
+        for h in range(1, 25):
+            peak = 1.15 if 18 <= ((h + 12) % 24) <= 22 else 1.0
+            forecast.append([base_load * peak, base_temp + (h * 0.1)])
+        return np.array(forecast)
+    
+    try:
+        # 1. Normalize the input sequence using stored mean and std
+        X_mean = norm["X_mean"]
+        X_std = norm["X_std"]
+        y_mean = norm["y_mean"]
+        y_std = norm["y_std"]
+        
+        seq_norm = (past_sequence_24h - X_mean) / (X_std + 1e-8)
+        
+        # 2. Add batch dimension: shape (1, 24, 4)
+        seq_tensor = torch.tensor(seq_norm, dtype=torch.float32).unsqueeze(0).to(DEVICE)
+        
+        # 3. Model forward pass
+        with torch.no_grad():
+            pred_norm = model(seq_tensor) # output shape: [1, 24, 2]
+            pred_norm = pred_norm.squeeze(0).cpu().numpy() # shape: [24, 2]
+            
+        # 4. Denormalize the output
+        predictions = (pred_norm * (y_std + 1e-8)) + y_mean
+        return predictions
+    except Exception as e:
+        logger.error(f"LSTM prediction run failed: {e}", exc_info=True)
+        forecast = []
+        base_load = past_sequence_24h[-1, 1]
+        base_temp = past_sequence_24h[-1, 0]
+        for h in range(1, 25):
+            peak = 1.15 if 18 <= ((h + 12) % 24) <= 22 else 1.0
+            forecast.append([base_load * peak, base_temp + (h * 0.1)])
+        return np.array(forecast)
+
 def train_lstm(save_path: str = "ml_models/lstm_forecaster.pt",
                epochs: int = 50, batch_size: int = 64,
                learning_rate: float = 0.001) -> dict:
@@ -192,7 +262,15 @@ def train_lstm(save_path: str = "ml_models/lstm_forecaster.pt",
     """
     logger.info("=== Training LSTM Forecaster ===")
 
-    X, y = generate_lstm_sequences(n_samples := 2000)
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    npz_path = os.path.join(base_dir, "data", "lstm_training_data.npz")
+    if not os.path.exists(npz_path):
+        raise FileNotFoundError(f"LSTM training data not found at {npz_path}. Run generate_datasets.py first.")
+    
+    data = np.load(npz_path)
+    X = data["X"]
+    y = data["y"]
+    logger.info(f"Loaded {len(X)} sequential samples from {npz_path}")
 
     # Normalize features (important for LSTM convergence)
     X_mean, X_std = X.mean(axis=(0, 1)), X.std(axis=(0, 1))
