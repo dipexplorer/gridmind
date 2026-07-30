@@ -171,9 +171,9 @@ class RealAIModel:
             anomaly_score = max(0.0, min(100.0, float(anomaly_score)))
 
             # Categorize Risk — 3-Tier Traffic Light System (Static Thresholds)
-            if anomaly_score >= 90:
+            if anomaly_score >= 75:
                 category = "CRITICAL"
-            elif anomaly_score >= 70:
+            elif anomaly_score >= 55:
                 category = "WARNING"
             else:
                 category = "HEALTHY"
@@ -257,9 +257,9 @@ class RealAIModel:
             daily_anomaly_score = max(0.0, min(100.0, daily_anomaly_score))
 
             # Categorize Risk
-            if daily_anomaly_score >= 90:
+            if daily_anomaly_score >= 75:
                 category = "CRITICAL"
-            elif daily_anomaly_score >= 70:
+            elif daily_anomaly_score >= 55:
                 category = "WARNING"
             else:
                 category = "HEALTHY"
@@ -348,7 +348,7 @@ class RealAIModel:
             
         results["isolation_forest"] = {
             "anomaly_score": round(iforest_score, 1),
-            "risk_category": "CRITICAL" if iforest_score >= 90 else ("WARNING" if iforest_score >= 70 else "HEALTHY"),
+            "risk_category": "CRITICAL" if iforest_score >= 75 else ("WARNING" if iforest_score >= 55 else "HEALTHY"),
             "expected_lifetime_days": int((100 - iforest_score) * 36.5)
         }
         
@@ -368,7 +368,7 @@ class RealAIModel:
             
         results["random_forest"] = {
             "anomaly_score": round(rf_score, 1),
-            "risk_category": "CRITICAL" if rf_score >= 90 else ("WARNING" if rf_score >= 70 else "HEALTHY"),
+            "risk_category": "CRITICAL" if rf_score >= 75 else ("WARNING" if rf_score >= 55 else "HEALTHY"),
             "expected_lifetime_days": int((100 - rf_score) * 36.5)
         }
         
@@ -387,7 +387,7 @@ class RealAIModel:
             
         results["xgboost"] = {
             "anomaly_score": round(xgb_score, 1),
-            "risk_category": "CRITICAL" if xgb_score >= 90 else ("WARNING" if xgb_score >= 70 else "HEALTHY"),
+            "risk_category": "CRITICAL" if xgb_score >= 75 else ("WARNING" if xgb_score >= 55 else "HEALTHY"),
             "expected_lifetime_days": int((100 - xgb_score) * 36.5)
         }
         
@@ -399,9 +399,9 @@ class RealAIModel:
         """
         base_score = random.uniform(10.0, 95.0)
         
-        if base_score >= 90:
+        if base_score >= 75:
             category = "CRITICAL"
-        elif base_score >= 70:
+        elif base_score >= 55:
             category = "WARNING"
         else:
             category = "HEALTHY"

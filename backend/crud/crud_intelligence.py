@@ -34,10 +34,10 @@ def get_transformer_score(db: Session, transformer_id: str):
             lifetime_days = 365
         else:
             # Fallback based on score
-            if anomaly_score_pct >= 90:
+            if anomaly_score_pct >= 75:
                 cat = "CRITICAL"
                 lifetime_days = 7
-            elif anomaly_score_pct >= 70:
+            elif anomaly_score_pct >= 55:
                 cat = "WARNING"
                 lifetime_days = 30
             else:
