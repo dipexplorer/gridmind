@@ -13,7 +13,7 @@ if not hasattr(scipy.integrate, 'trapz'):
     elif hasattr(np, 'trapezoid'):
         scipy.integrate.trapz = np.trapezoid
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from core.database import SessionLocal
 from core.config import settings
@@ -188,45 +188,85 @@ class RealAIModel:
             self._weather_cache[cache_key] = 30.0
             return 30.0
 
-    def predict_anomaly(self, transformer_id: str) -> Dict[str, Any]:
+    def predict_anomaly(
+        self,
+        transformer_id: str,
+        *,
+        temp_c: Optional[float] = None,
+        load_pct: Optional[float] = None,
+        voltage_lv: Optional[float] = None,
+        current_a: Optional[float] = None,
+        age_years: Optional[int] = None,
+        rated_kva: Optional[float] = None,
+        lat: Optional[float] = None,
+        lon: Optional[float] = None,
+    ) -> Dict[str, Any]:
         """
         Performs real independent inference for all models in parallel:
         - Isolation Forest -> Anomaly Score
         - XGBoost & Random Forest -> Risk Categories
         - Cox Survival -> Remaining Useful Life (RUL) and Survival Probability
         - Decision Fusion Engine -> Fused Health Score (0-100) and Sigmoid Failure Probability
+
+        Optional keyword arguments allow callers (e.g. inference_service) to pass
+        pre-fetched sensor values directly, avoiding a duplicate DB round-trip and
+        ensuring that live telemetry CSV values are used for inference.
         """
         self.load_models_if_needed()
         if self.model is None or self.survival_model is None or self.explainer is None:
             return self._fallback_predict(transformer_id)
 
-        db = SessionLocal()
+        # ── Resolve sensor values ─────────────────────────────────────────────
+        # If caller supplied values, use them directly (no DB round-trip needed).
+        # Otherwise open a DB session to read the latest snapshot.
+        _need_db = any(v is None for v in [temp_c, load_pct, age_years, rated_kva])
+        _db_lat = 26.14
+        _db_lon = 91.74
+
+        if _need_db:
+            db = SessionLocal()
+            try:
+                from models.asset import Transformer
+                t = db.query(Transformer).filter(Transformer.id == transformer_id).first()
+                if t:
+                    if temp_c is None:
+                        temp_c = float(t.current_oil_temp_c) if t.current_oil_temp_c is not None else 40.0
+                    if load_pct is None:
+                        load_pct = float(t.current_load_pct) if t.current_load_pct is not None else 45.0
+                    if age_years is None:
+                        age_years = int(t.age_years) if t.age_years is not None else 10
+                    if rated_kva is None:
+                        rated_kva = float(t.rated_kva) if t.rated_kva is not None else 500.0
+                    try:
+                        from geoalchemy2.shape import to_shape
+                        if t.location:
+                            point = to_shape(t.location)
+                            _db_lat = float(point.y)
+                            _db_lon = float(point.x)
+                    except Exception:
+                        pass
+                else:
+                    temp_c = temp_c or 40.0
+                    load_pct = load_pct or 45.0
+                    age_years = age_years or 10
+                    rated_kva = rated_kva or 500.0
+            except Exception as db_err:
+                logger.warning(f"DB lookup failed in predict_anomaly ({transformer_id}): {db_err}. Using safe defaults.")
+                temp_c = temp_c or 40.0
+                load_pct = load_pct or 45.0
+                age_years = age_years or 10
+                rated_kva = rated_kva or 500.0
+            finally:
+                db.close()
+
+        # Final safe defaults if still None
+        temp_c = temp_c or 40.0
+        load_pct = load_pct or 45.0
+        age_years = age_years or 10
+        rated_kva = rated_kva or 500.0
+        lat = lat if lat is not None else _db_lat
+        lon = lon if lon is not None else _db_lon
         try:
-            from models.asset import Transformer
-            t = db.query(Transformer).filter(Transformer.id == transformer_id).first()
-
-            lat = 26.14
-            lon = 91.74
-            age_years = 10
-            rated_kva = 500.0
-
-            if t:
-                load_pct = float(t.current_load_pct) if t.current_load_pct is not None else 45.0
-                temp_c = float(t.current_oil_temp_c) if t.current_oil_temp_c is not None else 40.0
-                age_years = int(t.age_years) if t.age_years is not None else 10
-                rated_kva = float(t.rated_kva) if t.rated_kva is not None else 500.0
-                try:
-                    from geoalchemy2.shape import to_shape
-                    if t.location:
-                        point = to_shape(t.location)
-                        lat = float(point.y)
-                        lon = float(point.x)
-                except Exception:
-                    pass
-            else:
-                load_pct = 45.0
-                temp_c = 40.0
-
             # Synthesize voltage, current and power factor using physics-aware formulas
             # PF dynamic based on load
             power_factor = 0.82 + (load_pct / 150.0) * 0.16 + random.normalvariate(0, 0.01)
@@ -396,17 +436,26 @@ class RealAIModel:
                 "shap_values": shap_list,
                 "xgb_shap_values": xgb_shap_list,
                 "model_predictions": {
-                    "isolation_forest_anomaly_score": round(anomaly_score, 2),
-                    "xgboost_risk_category": xgb_category,
-                    "random_forest_risk_category": rf_category,
-                    "cox_ph_remaining_life_days": expected_lifetime_days
+                    "isolation_forest": {
+                        "anomaly_score": round(anomaly_score, 2),
+                        "risk_category": risk_category,
+                        "expected_lifetime_days": expected_lifetime_days
+                    },
+                    "xgboost": {
+                        "anomaly_score": round(100.0 - health_xgb, 2),
+                        "risk_category": xgb_category,
+                        "expected_lifetime_days": expected_lifetime_days
+                    },
+                    "random_forest": {
+                        "anomaly_score": round(anomaly_score, 2),
+                        "risk_category": rf_category,
+                        "expected_lifetime_days": expected_lifetime_days
+                    }
                 }
             }
         except Exception as e:
             logger.error(f"Error during real AI inference: {e}", exc_info=True)
             return self._fallback_predict(transformer_id)
-        finally:
-            db.close()
 
     def predict_daily_health(self, transformer_id: str, readings: list, calculate_shap: bool = True, age_years: int = None, rated_kva: float = None) -> Dict[str, Any]:
         """
@@ -616,10 +665,21 @@ class RealAIModel:
                 "avg_load_pct": avg_load,
                 "avg_temp_c": avg_temp,
                 "model_predictions": {
-                    "isolation_forest_anomaly_score": round(daily_anomaly_score, 2),
-                    "xgboost_risk_category": xgb_category,
-                    "random_forest_risk_category": rf_category,
-                    "cox_ph_remaining_life_days": expected_lifetime_days
+                    "isolation_forest": {
+                        "anomaly_score": round(daily_anomaly_score, 2),
+                        "risk_category": risk_category,
+                        "expected_lifetime_days": expected_lifetime_days
+                    },
+                    "xgboost": {
+                        "anomaly_score": round(100.0 - health_xgb, 2),
+                        "risk_category": xgb_category,
+                        "expected_lifetime_days": expected_lifetime_days
+                    },
+                    "random_forest": {
+                        "anomaly_score": round(daily_anomaly_score, 2),
+                        "risk_category": rf_category,
+                        "expected_lifetime_days": expected_lifetime_days
+                    }
                 }
             }
         except Exception as e:
@@ -676,10 +736,11 @@ class RealAIModel:
             iforest_score = 15.0
             
         iforest_category = "CRITICAL" if iforest_score >= 90 else ("WARNING" if iforest_score >= 70 else "HEALTHY")
+        iforest_life = int((100 - iforest_score) * 36.5)
         results["isolation_forest"] = {
             "anomaly_score": round(iforest_score, 1),
             "risk_category": iforest_category,
-            "expected_lifetime_days": 7 if iforest_category == "CRITICAL" else (90 if iforest_category == "WARNING" else 365)
+            "expected_lifetime_days": iforest_life
         }
         
         # 2. Random Forest
@@ -701,10 +762,11 @@ class RealAIModel:
         except Exception as e:
             logger.error(f"Failed RF prediction: {e}")
             
+        rf_life = int((100 - rf_score) * 36.5)
         results["random_forest"] = {
             "anomaly_score": round(rf_score, 1),
             "risk_category": rf_category,
-            "expected_lifetime_days": 7 if rf_category == "CRITICAL" else (90 if rf_category == "WARNING" else 365)
+            "expected_lifetime_days": rf_life
         }
         
         # 3. XGBoost
@@ -726,54 +788,51 @@ class RealAIModel:
         except Exception as e:
             logger.error(f"Failed XGB prediction: {e}")
             
+        xgb_life = int((100 - xgb_score) * 36.5)
         results["xgboost"] = {
             "anomaly_score": round(xgb_score, 1),
             "risk_category": xgb_category,
-            "expected_lifetime_days": 7 if xgb_category == "CRITICAL" else (90 if xgb_category == "WARNING" else 365)
+            "expected_lifetime_days": xgb_life
         }
         
         return results
 
     def _fallback_predict(self, transformer_id: str) -> Dict[str, Any]:
         """
-        Mock fallback prediction service when ML models are missing or training failed.
+        Fallback when ML models are not yet loaded. Returns a neutral/unavailable
+        response — does NOT fabricate random scores.
         """
-        base_score = random.uniform(10.0, 95.0)
-        health_score = 100.0 - base_score
-        
-        if base_score >= 90:
-            category = "CRITICAL"
-        elif base_score >= 70:
-            category = "WARNING"
-        else:
-            category = "HEALTHY"
-            
-        shap_values = []
-        for feature in self.features:
-            shap_values.append({
-                "feature_name": feature,
-                "feature_value": round(random.uniform(20.0, 100.0), 2),
-                "shap_value": random.uniform(-0.1, 0.4)
-            })
-            
-        expected_lifetime_days = int((100 - base_score) * 36.5)
-            
+        logger.warning(
+            f"ML models not loaded — returning fallback (no-score) for transformer {transformer_id}."
+        )
+        expected_lifetime_days = 365  # neutral default — models not loaded
         return {
             "transformer_id": transformer_id,
-            "anomaly_score": round(base_score, 2),
-            "health_score": round(health_score, 1),
-            "failure_probability": round(base_score, 1),
-            "risk_category": category,
+            "anomaly_score": 0.0,
+            "health_score": None,
+            "failure_probability": None,
+            "risk_category": "UNKNOWN",
             "expected_lifetime_days": expected_lifetime_days,
-            "confidence_interval_lower": max(0, expected_lifetime_days - 30),
+            "confidence_interval_lower": 0,
             "confidence_interval_upper": expected_lifetime_days + 30,
-            "shap_values": shap_values,
-            "xgb_shap_values": shap_values,
+            "shap_values": [],
+            "xgb_shap_values": [],
             "model_predictions": {
-                "isolation_forest_anomaly_score": round(base_score, 2),
-                "xgboost_risk_category": category,
-                "random_forest_risk_category": category,
-                "cox_ph_remaining_life_days": expected_lifetime_days
+                "isolation_forest": {
+                    "anomaly_score": 0.0,
+                    "risk_category": "UNKNOWN",
+                    "expected_lifetime_days": expected_lifetime_days
+                },
+                "xgboost": {
+                    "anomaly_score": 0.0,
+                    "risk_category": "UNKNOWN",
+                    "expected_lifetime_days": expected_lifetime_days
+                },
+                "random_forest": {
+                    "anomaly_score": 0.0,
+                    "risk_category": "UNKNOWN",
+                    "expected_lifetime_days": expected_lifetime_days
+                }
             }
         }
 

@@ -75,6 +75,11 @@ class InferenceService:
         latest_read = get_latest_telemetry(transformer_id)
         data_source = "live_cache"
 
+        temp_c = None
+        load_pct = None
+        voltage_lv = None
+        current_a = None
+
         if not latest_read:
             # Fall back to DB snapshot (written by predict_daily_batch.py)
             if (
@@ -85,24 +90,48 @@ class InferenceService:
                     f"Transformer {transformer_id}: No live telemetry, using DB snapshot."
                 )
                 data_source = "db_snapshot"
-                # We can still run inference — the DB snapshot was written by the
-                # last batch job and reflects real sensor values.
+                temp_c = float(transformer.current_oil_temp_c)
+                load_pct = float(transformer.current_load_pct)
             else:
                 logger.warning(
                     f"Transformer {transformer_id}: No telemetry at all. "
                     "Returning unavailable response."
                 )
                 return self._no_telemetry_response(transformer_id, transformer)
+        else:
+            temp_c = float(latest_read["temperature_c"]) if latest_read.get("temperature_c") is not None else None
+            load_pct = float(latest_read["load_percentage"]) if latest_read.get("load_percentage") is not None else None
+            voltage_lv = float(latest_read["voltage_lv"]) if latest_read.get("voltage_lv") is not None else None
+            current_a = float(latest_read["current_a"]) if latest_read.get("current_a") is not None else None
+
+        # Resolve asset specs
+        age_years = int(transformer.age_years) if transformer.age_years is not None else 10
+        rated_kva = float(transformer.rated_kva) if transformer.rated_kva is not None else 500.0
+
+        # Coordinates
+        lat, lon = None, None
+        try:
+            from geoalchemy2.shape import to_shape
+            if transformer.location:
+                point = to_shape(transformer.location)
+                lat = float(point.y)
+                lon = float(point.x)
+        except Exception:
+            pass
 
         # ── 2. Run full fusion inference ─────────────────────────────────────
-        # predict_anomaly() handles ALL physics:
-        #   - impedance voltage drop
-        #   - current formula
-        #   - feature engineering
-        #   - 4-model fusion (IF + XGB + RF + Cox PH)
-        #   - sigmoid failure probability
         try:
-            pred = ai_service.predict_anomaly(transformer_id)
+            pred = ai_service.predict_anomaly(
+                transformer_id,
+                temp_c=temp_c,
+                load_pct=load_pct,
+                voltage_lv=voltage_lv,
+                current_a=current_a,
+                age_years=age_years,
+                rated_kva=rated_kva,
+                lat=lat,
+                lon=lon
+            )
         except Exception as e:
             logger.error(
                 f"predict_anomaly failed for {transformer_id}: {e}", exc_info=True
