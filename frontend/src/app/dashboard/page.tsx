@@ -110,12 +110,7 @@ export default function Dashboard() {
       const combined: CombinedData[] = (allTransformers || []).map((t: any) => {
         const substation_name = t.substation_id ? subMap.get(t.substation_id) : "Unknown Substation";
         const score = (t.current_failure_risk || 0) * 100;
-        let cat = "UNKNOWN";
-        if (t.current_failure_risk !== null && t.current_failure_risk !== undefined) {
-          if (score >= 90) cat = "CRITICAL";
-          else if (score >= 70) cat = "WARNING";
-          else cat = "HEALTHY";
-        }
+        const cat = (t.current_status || 'healthy').toUpperCase();
         // Build WKT string from flat lat/lon so TransformerMap's parseWKT() works
         const location = (t.latitude && t.longitude)
           ? `POINT(${t.longitude} ${t.latitude})`
