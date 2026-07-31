@@ -35,6 +35,22 @@ class RealAIModel:
         import threading
         self._lock = threading.Lock()
 
+    def calibrate_anomaly_score(self, score: float) -> float:
+        """
+        Calibrates raw anomaly scores (typically in 15-78 range) to standard
+        business thresholds expected by the frontend: WARNING >= 70%, CRITICAL >= 90%.
+        """
+        if score >= 70.0:
+            # Stretch 70-78 range to 90-100
+            calibrated = 90.0 + (score - 70.0) * (10.0 / 8.0)
+        elif score >= 50.0:
+            # Stretch 50-70 range to 70-90
+            calibrated = 70.0 + (score - 50.0) * (20.0 / 20.0)
+        else:
+            # Scale 0-50 range to 0-70
+            calibrated = score * (70.0 / 50.0)
+        return max(0.0, min(100.0, float(calibrated)))
+
     def load_models_if_needed(self):
         with self._lock:
             if not self._models_loaded:
@@ -167,8 +183,8 @@ class RealAIModel:
                 heat_stress_penalty = min(15.0, (ambient_temp - 35.0) * 2.0)
                 anomaly_score += heat_stress_penalty
 
-            # Clip between 0 and 100 to prevent database overflow
-            anomaly_score = max(0.0, min(100.0, float(anomaly_score)))
+            # Calibrate anomaly score to align with frontend thresholds
+            anomaly_score = self.calibrate_anomaly_score(anomaly_score)
 
             # Categorize Risk — 3-Tier Traffic Light System (Static Thresholds)
             if anomaly_score >= 90:
@@ -254,7 +270,7 @@ class RealAIModel:
 
             # Max daily anomaly score (Peak anomaly detection over 24h)
             daily_anomaly_score = float(np.max(anomaly_scores))
-            daily_anomaly_score = max(0.0, min(100.0, daily_anomaly_score))
+            daily_anomaly_score = self.calibrate_anomaly_score(daily_anomaly_score)
 
             # Categorize Risk
             if daily_anomaly_score >= 90:
@@ -342,7 +358,7 @@ class RealAIModel:
         # 1. Isolation Forest (Production)
         if self.model is not None:
             raw_score = self.model.decision_function(df_x)[0]
-            iforest_score = max(0.0, min(100.0, float(35 - (raw_score * 350))))
+            iforest_score = self.calibrate_anomaly_score(max(0.0, min(100.0, float(35 - (raw_score * 350)))))
         else:
             iforest_score = 15.0
             
@@ -357,23 +373,34 @@ class RealAIModel:
         
         # 2. Random Forest
         rf_score = 15.0
+        rf_category = "HEALTHY"
         try:
             rf_path = os.path.join(base_dir, "ml_models", "benchmark_random_forest.pkl")
             if os.path.exists(rf_path):
                 rf_model = joblib.load(rf_path)
                 proba = rf_model.predict_proba(df_x)[0]  # [safe, warning, critical]
-                rf_score = float((1.0 - proba[0]) * 100.0)
+                max_class = np.argmax(proba)
+                if max_class == 2:  # CRITICAL
+                    rf_category = "CRITICAL"
+                    rf_score = 90.0 + (proba[2] * 10.0)
+                elif max_class == 1:  # WARNING
+                    rf_category = "WARNING"
+                    rf_score = 70.0 + (proba[1] * 20.0)
+                else:  # SAFE (HEALTHY)
+                    rf_category = "HEALTHY"
+                    rf_score = proba[1] * 70.0
         except Exception as e:
             logger.error(f"Failed RF prediction: {e}")
             
         results["random_forest"] = {
             "anomaly_score": round(rf_score, 1),
-            "risk_category": "CRITICAL" if rf_score >= 90 else ("WARNING" if rf_score >= 70 else "HEALTHY"),
+            "risk_category": rf_category,
             "expected_lifetime_days": int((100 - rf_score) * 36.5)
         }
         
         # 3. XGBoost
         xgb_score = 15.0
+        xgb_category = "HEALTHY"
         try:
             xgb_path = os.path.join(base_dir, "ml_models", "benchmark_xgboost.pkl")
             if not os.path.exists(xgb_path):
@@ -381,13 +408,22 @@ class RealAIModel:
             if os.path.exists(xgb_path):
                 xgb_model = joblib.load(xgb_path)
                 proba = xgb_model.predict_proba(df_x)[0]
-                xgb_score = float((1.0 - proba[0]) * 100.0)
+                max_class = np.argmax(proba)
+                if max_class == 2:  # CRITICAL
+                    xgb_category = "CRITICAL"
+                    xgb_score = 90.0 + (proba[2] * 10.0)
+                elif max_class == 1:  # WARNING
+                    xgb_category = "WARNING"
+                    xgb_score = 70.0 + (proba[1] * 20.0)
+                else:  # SAFE (HEALTHY)
+                    xgb_category = "HEALTHY"
+                    xgb_score = proba[1] * 70.0
         except Exception as e:
             logger.error(f"Failed XGB prediction: {e}")
             
         results["xgboost"] = {
             "anomaly_score": round(xgb_score, 1),
-            "risk_category": "CRITICAL" if xgb_score >= 90 else ("WARNING" if xgb_score >= 70 else "HEALTHY"),
+            "risk_category": xgb_category,
             "expected_lifetime_days": int((100 - xgb_score) * 36.5)
         }
         
