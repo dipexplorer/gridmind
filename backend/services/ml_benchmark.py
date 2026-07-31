@@ -79,7 +79,7 @@ def get_benchmark_models() -> dict:
             max_depth=12,           # Prevent overfitting on synthetic data
             class_weight="balanced",# Handle class imbalance (failures are rare)
             random_state=42,
-            n_jobs=-1               # Use all CPU cores
+            n_jobs=2               # Limit cores to prevent VM lockups
         )
     }
 
@@ -92,7 +92,7 @@ def get_benchmark_models() -> dict:
             colsample_bytree=0.8,   # Feature sampling per tree
             eval_metric="mlogloss", # Multi-class log loss
             random_state=42,
-            n_jobs=-1
+            n_jobs=2
         )
     else:
         # Fallback: Gradient Boosting from sklearn if XGBoost not installed

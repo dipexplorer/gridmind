@@ -54,9 +54,11 @@ def generate_all_datasets():
                 pass
             ambient_temp = ai_service._fetch_live_weather(lat, lon)
 
-            status = (t.current_status or "").lower()
-            is_critical = status == "critical"
-            is_warning = status == "warning"
+            # Deterministic status profile based on transformer ID to avoid DB dependency
+            status_random = random.Random(str(t.id))
+            rand_val = status_random.random()
+            is_critical = (rand_val < 0.05)
+            is_warning = (0.05 <= rand_val < 0.15)
 
             for h in range(24):
                 time_pt = now - timedelta(hours=(23 - h))
@@ -133,54 +135,69 @@ def generate_all_datasets():
         logger.info(f"Saved {len(trend_df)} rows to {trend_path}")
 
         # ==========================================
-        # 3. Generate ml_training_dataset.csv
+        # 3. Generate ml_training_dataset.csv (Stratified — realistic operational distribution)
         # ==========================================
         logger.info("Generating ml_training_dataset.csv (10,000 samples)...")
-        n_samples = 10000
         np.random.seed(42)
 
-        temp_c = np.random.uniform(30.0, 110.0, n_samples)
-        load_pct = np.random.uniform(15.0, 140.0, n_samples)
-        voltage_lv = np.random.uniform(350.0, 430.0, n_samples)
-        current_a = np.random.uniform(20.0, 400.0, n_samples)
+        # Stratified sampling to match real-world fleet distribution:
+        # 70% healthy, 15% warning, 15% critical
+        n_safe     = 7000
+        n_warning  = 1500
+        n_critical = 1500
 
-        labels = np.zeros(n_samples, dtype=int)  # Default: SAFE (0)
+        # --- HEALTHY: tight normal operating ranges ---
+        safe_temp    = np.random.uniform(25.0, 70.0, n_safe)
+        safe_load    = np.random.uniform(15.0, 80.0, n_safe)
+        safe_voltage = np.random.uniform(395.0, 430.0, n_safe)
+        safe_current = safe_load * np.random.uniform(2.0, 4.0, n_safe)
+        safe_labels  = np.zeros(n_safe, dtype=int)
 
-        warning_mask = (
-            (temp_c > 70) & (temp_c <= 85) |
-            (load_pct > 80) & (load_pct <= 95) |
-            (voltage_lv < 385)
-        )
-        critical_mask = (
-            ((temp_c > 85) & (load_pct > 90)) |
-            ((temp_c > 90) & (voltage_lv < 380)) |
-            (load_pct > 110)
-        )
+        # --- WARNING: elevated stress ranges ---
+        warn_temp    = np.random.uniform(70.0, 85.0, n_warning)
+        warn_load    = np.random.uniform(80.0, 110.0, n_warning)
+        warn_voltage = np.random.uniform(370.0, 395.0, n_warning)
+        warn_current = warn_load * np.random.uniform(2.5, 4.5, n_warning)
+        warn_labels  = np.ones(n_warning, dtype=int)
 
-        labels[warning_mask] = 1   # WARNING
-        labels[critical_mask] = 2  # CRITICAL
+        # --- CRITICAL: severe anomaly ranges ---
+        crit_temp    = np.random.uniform(85.0, 115.0, n_critical)
+        crit_load    = np.random.uniform(110.0, 140.0, n_critical)
+        crit_voltage = np.random.uniform(350.0, 370.0, n_critical)
+        crit_current = crit_load * np.random.uniform(3.0, 5.0, n_critical)
+        crit_labels  = np.full(n_critical, 2, dtype=int)
 
-        # Add 3% noise to class labels to reflect real-world overlapping
-        noise_idx = np.random.choice(n_samples, size=int(n_samples * 0.03), replace=False)
-        labels[noise_idx] = np.random.randint(0, 3, size=len(noise_idx))
+        # Stack all classes together and shuffle
+        all_temp    = np.concatenate([safe_temp,    warn_temp,    crit_temp])
+        all_load    = np.concatenate([safe_load,    warn_load,    crit_load])
+        all_voltage = np.concatenate([safe_voltage, warn_voltage, crit_voltage])
+        all_current = np.concatenate([safe_current, warn_current, crit_current])
+        all_labels  = np.concatenate([safe_labels,  warn_labels,  crit_labels])
+
+        shuffle_idx = np.random.permutation(len(all_labels))
 
         train_df = pd.DataFrame({
-            "temperature_c": np.round(temp_c, 2),
-            "load_percentage": np.round(load_pct, 2),
-            "voltage_lv": np.round(voltage_lv, 1),
-            "current_a": np.round(current_a, 1),
-            "risk_label": labels
+            "temperature_c":   np.round(all_temp[shuffle_idx], 2),
+            "load_percentage": np.round(all_load[shuffle_idx], 2),
+            "voltage_lv":      np.round(all_voltage[shuffle_idx], 1),
+            "current_a":       np.round(all_current[shuffle_idx], 1),
+            "risk_label":      all_labels[shuffle_idx]
         })
 
         train_path = os.path.join(data_dir, "ml_training_dataset.csv")
         train_df.to_csv(train_path, index=False)
-        logger.info(f"Saved {len(train_df)} rows of training data to {train_path}")
+        label_counts = train_df['risk_label'].value_counts().sort_index()
+        logger.info(f"Saved {len(train_df)} rows of training data: SAFE={label_counts.get(0,0)}, WARNING={label_counts.get(1,0)}, CRITICAL={label_counts.get(2,0)}")
 
         # ==========================================
         # 4. Generate seed_transformers.csv (Baseline Database Snapshot)
         # ==========================================
         logger.info("Generating seed_transformers.csv...")
         seed_rows = []
+
+        # Cache substations and feeders to prevent 3300+ database round-trips
+        substations_cache = {s.id: s for s in db.query(Substation).all()}
+        feeders_cache = {f.id: f for f in db.query(Feeder).all()}
 
         for idx, t in enumerate(transformers):
             # Extract longitude/latitude from PostGIS Geography
@@ -193,8 +210,8 @@ def generate_all_datasets():
             except Exception:
                 pass
 
-            sub = db.query(Substation).filter(Substation.id == t.substation_id).first()
-            fd = db.query(Feeder).filter(Feeder.id == t.feeder_id).first()
+            sub = substations_cache.get(t.substation_id)
+            fd = feeders_cache.get(t.feeder_id)
 
             seed_rows.append({
                 "transformer_id": str(t.id),

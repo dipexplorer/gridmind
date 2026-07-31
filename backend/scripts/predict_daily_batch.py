@@ -23,6 +23,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.database import SessionLocal
 from models.asset import Transformer
 from services.ai_service import ai_service
+from services.data_cache import load_data_caches, get_telemetry_history
 
 # Configure logging
 logging.basicConfig(
@@ -36,6 +37,9 @@ logger = logging.getLogger("DailyBatchPredictor")
 def run_batch_prediction():
     db = SessionLocal()
     try:
+        logger.info("Loading telemetry cache from telemetry_history.csv...")
+        load_data_caches()
+        
         logger.info("Initializing Daily Batch ML Prediction Run...")
         transformers = db.query(Transformer).all()
         if not transformers:
@@ -45,61 +49,31 @@ def run_batch_prediction():
         anomalies_detected = 0
         updated_count = 0
 
+        class TelemetryReading:
+            def __init__(self, temp_c, load_pct, v_lv, curr_a):
+                self.temperature_c = temp_c
+                self.load_percentage = load_pct
+                self.voltage_lv = v_lv
+                self.current_a = curr_a
+
         for idx, t in enumerate(transformers):
             try:
-                # Get coordinates
-                lat = 26.14
-                lon = 91.74
-                try:
-                    from geoalchemy2.shape import to_shape
-                    if t.location:
-                        point = to_shape(t.location)
-                        lat = float(point.y)
-                        lon = float(point.x)
-                except Exception:
-                    pass
-                ambient_temp = ai_service._fetch_live_weather(lat, lon)
-
-                # Simulate realistic distribution of statuses:
-                # 5% chance of Critical anomaly, 10% chance of Warning anomaly, 85% chance of Healthy operation
-                rand_val = random.random()
-                is_critical = (rand_val < 0.05)
-                is_warning = (0.05 <= rand_val < 0.15)
-                
-                class SyntheticReading:
-                    def __init__(self, temp_c, load_pct, v_lv, curr_a):
-                        self.temperature_c = temp_c
-                        self.load_percentage = load_pct
-                        self.voltage_lv = v_lv
-                        self.current_a = curr_a
+                # Query actual telemetry from cache
+                history_df = get_telemetry_history(str(t.id))
                 
                 readings = []
-                for h in range(24):
-                    if is_critical:
-                        # Critical anomaly: Severe overheating & overloading
-                        temp = ambient_temp + random.uniform(55, 75)
-                        load = random.uniform(105, 135)
-                        voltage = random.uniform(350, 375)
-                    elif is_warning:
-                        # Warning anomaly: Moderate thermal & load stress
-                        temp = ambient_temp + random.uniform(35, 55)
-                        load = random.uniform(85, 110)
-                        voltage = random.uniform(370, 395)
-                    else:
-                        # Healthy Normal operations (Aligned with training dataset parameters)
-                        # Higher temperature during noon hours (11am - 4pm)
-                        temp_offset = random.uniform(5, 12) if 11 <= h <= 16 else random.uniform(0, 4)
-                        temp = ambient_temp + temp_offset + random.uniform(-1, 1)
-                        # Normal load range: 40% to 80% (never exceeds 80% under normal operation)
-                        load = random.uniform(40, 80)
-                        # Normal voltage range: 405V to 420V
-                        voltage = random.uniform(405, 420)
-                    
-                    # Current is proportional to load
-                    base_current = (float(t.rated_kva) * 1000.0) / (415.0 * 1.732) if t.rated_kva else 139.0
-                    current = base_current * (load / 100.0) + random.uniform(-5, 5)
-                    
-                    readings.append(SyntheticReading(temp, load, voltage, current))
+                if not history_df.empty:
+                    for _, row in history_df.iterrows():
+                        readings.append(TelemetryReading(
+                            float(row["temperature_c"]),
+                            float(row["load_percentage"]),
+                            float(row["voltage_lv"]),
+                            float(row["current_a"])
+                        ))
+                else:
+                    # Fallback healthy readings if no telemetry cached
+                    for h in range(24):
+                        readings.append(TelemetryReading(40.0, 50.0, 415.0, 100.0))
 
                 # Run Batch ML Predictor without SHAP calculations (not saved to DB)
                 pred = ai_service.predict_daily_health(str(t.id), readings, calculate_shap=False)
@@ -119,7 +93,7 @@ def run_batch_prediction():
                 t.current_oil_temp_c = pred.get("avg_temp_c", t.current_oil_temp_c)
                 t.last_updated = datetime.now(timezone.utc)
 
-                if risk_category in ("HIGH", "CRITICAL"):
+                if risk_category in ("WARNING", "CRITICAL"):
                     anomalies_detected += 1
                 updated_count += 1
 

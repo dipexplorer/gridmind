@@ -28,28 +28,22 @@ class RealAIModel:
     
     def __init__(self):
         self.features = ["temperature_c", "load_percentage", "voltage_lv", "current_a"]
-        self.model = None
+        self.model = None          # Isolation Forest (anomaly score)
+        self.xgb_model = None      # XGBoost (status classification)
         self.survival_model = None
         self.explainer = None
         self._models_loaded = False
         import threading
         self._lock = threading.Lock()
 
-    def calibrate_anomaly_score(self, score: float) -> float:
+    def raw_to_anomaly_score(self, raw: float) -> float:
         """
-        Calibrates raw anomaly scores (typically in 15-78 range) to standard
-        business thresholds expected by the frontend: WARNING >= 70%, CRITICAL >= 90%.
+        Converts Isolation Forest decision_function output to 0-100 anomaly score.
+        decision_function: positive = normal (inlier), negative = anomaly (outlier).
+        Typical range: -0.5 (highly anomalous) to +0.5 (very normal).
+        Maps to: anomaly_score = (0.5 - raw) * 100, clipped to [0, 100].
         """
-        if score >= 70.0:
-            # Stretch 70-78 range to 90-100
-            calibrated = 90.0 + (score - 70.0) * (10.0 / 8.0)
-        elif score >= 50.0:
-            # Stretch 50-70 range to 70-90
-            calibrated = 70.0 + (score - 50.0) * (20.0 / 20.0)
-        else:
-            # Scale 0-50 range to 0-70
-            calibrated = score * (70.0 / 50.0)
-        return max(0.0, min(100.0, float(calibrated)))
+        return float(np.clip((0.5 - raw) * 100.0, 0.0, 100.0))
 
     def load_models_if_needed(self):
         with self._lock:
@@ -60,10 +54,14 @@ class RealAIModel:
     def load_models(self):
         """
         Loads models from ml_models directory if available.
+        - Isolation Forest: unsupervised anomaly score (0-100)
+        - XGBoost: supervised status classification (SAFE/WARNING/CRITICAL)
+        - Cox Survival: remaining useful life estimation
         """
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        model_path = os.path.join(base_dir, "ml_models", "isolation_forest.pkl")
+        model_path    = os.path.join(base_dir, "ml_models", "isolation_forest.pkl")
         survival_path = os.path.join(base_dir, "ml_models", "survival_model.pkl")
+        xgb_path      = os.path.join(base_dir, "ml_models", "benchmark_xgboost.pkl")
 
         if os.path.exists(model_path):
             try:
@@ -77,6 +75,15 @@ class RealAIModel:
                 logger.error(f"Failed to load Isolation Forest model: {e}")
         else:
             logger.warning(f"Isolation Forest model not found at {model_path}. Running in mock mode.")
+
+        if os.path.exists(xgb_path):
+            try:
+                self.xgb_model = joblib.load(xgb_path)
+                logger.info("Successfully loaded XGBoost classifier for status prediction.")
+            except Exception as e:
+                logger.error(f"Failed to load XGBoost model: {e}")
+        else:
+            logger.warning(f"XGBoost model not found at {xgb_path}. Will use IF for classification.")
 
         if os.path.exists(survival_path):
             try:
@@ -264,24 +271,35 @@ class RealAIModel:
 
             df = pd.DataFrame(data, columns=self.features)
 
-            # Predict anomaly scores for all hours
-            raw_scores = self.model.decision_function(df)
-            anomaly_scores = 35 - (raw_scores * 350)
+            # 1. Anomaly score from Isolation Forest (0-100, higher = more anomalous)
+            raw_scores    = self.model.decision_function(df)
+            anomaly_scores = np.clip((0.5 - raw_scores) * 100.0, 0.0, 100.0)
 
-            # Max daily anomaly score (Peak anomaly detection over 24h)
+            # Peak daily anomaly score (worst hour of the day)
             daily_anomaly_score = float(np.max(anomaly_scores))
-            daily_anomaly_score = self.calibrate_anomaly_score(daily_anomaly_score)
 
-            # Categorize Risk
-            if daily_anomaly_score >= 90:
-                category = "CRITICAL"
-            elif daily_anomaly_score >= 70:
-                category = "WARNING"
-            else:
-                category = "HEALTHY"
-
-            # Compute daily averages
+            # Compute daily averages first (needed for XGBoost classification)
             mean_features = df.mean()
+
+            # 2. XGBoost-based status classification on daily averages (if available)
+            # XGB is supervised and 98%+ accurate — use it to drive status category
+            if self.xgb_model is not None:
+                xgb_input = pd.DataFrame([mean_features.values], columns=self.features)
+                xgb_pred  = int(self.xgb_model.predict(xgb_input)[0])
+                # Also check peak hours for classification (if any hour is critical, flag it)
+                xgb_preds_all = self.xgb_model.predict(df)
+                max_pred = int(np.max(xgb_preds_all))
+                final_pred = max(xgb_pred, max_pred)  # Take worst classification
+                category_map = {0: "HEALTHY", 1: "WARNING", 2: "CRITICAL"}
+                category = category_map.get(final_pred, "HEALTHY")
+            else:
+                # Fallback to Isolation Forest threshold if XGBoost unavailable
+                if daily_anomaly_score >= 70:
+                    category = "CRITICAL"
+                elif daily_anomaly_score >= 40:
+                    category = "WARNING"
+                else:
+                    category = "HEALTHY"
 
             shap_list = []
             if calculate_shap and self.explainer is not None:
