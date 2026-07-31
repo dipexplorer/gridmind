@@ -60,8 +60,11 @@ def run_batch_prediction():
                     pass
                 ambient_temp = ai_service._fetch_live_weather(lat, lon)
 
-                # 10% chance to simulate an anomaly (overheating/overloaded)
-                is_anomalous = (random.random() < 0.10)
+                # Simulate realistic distribution of statuses:
+                # 5% chance of Critical anomaly, 10% chance of Warning anomaly, 85% chance of Healthy operation
+                rand_val = random.random()
+                is_critical = (rand_val < 0.05)
+                is_warning = (0.05 <= rand_val < 0.15)
                 
                 class SyntheticReading:
                     def __init__(self, temp_c, load_pct, v_lv, curr_a):
@@ -72,22 +75,25 @@ def run_batch_prediction():
                 
                 readings = []
                 for h in range(24):
-                    if is_anomalous:
-                        # Overheating: oil temperature rises up to 105C
-                        temp = ambient_temp + random.uniform(50, 75)
-                        # Overloaded: load stays high at 110% - 135%
+                    if is_critical:
+                        # Critical anomaly: Severe overheating & overloading
+                        temp = ambient_temp + random.uniform(55, 75)
                         load = random.uniform(105, 135)
-                        # Low voltage: voltage drops significantly
                         voltage = random.uniform(350, 375)
+                    elif is_warning:
+                        # Warning anomaly: Moderate thermal & load stress
+                        temp = ambient_temp + random.uniform(35, 55)
+                        load = random.uniform(85, 110)
+                        voltage = random.uniform(370, 395)
                     else:
-                        # Normal operations:
+                        # Healthy Normal operations (Aligned with training dataset parameters)
                         # Higher temperature during noon hours (11am - 4pm)
                         temp_offset = random.uniform(5, 12) if 11 <= h <= 16 else random.uniform(0, 4)
-                        temp = ambient_temp + temp_offset + random.uniform(-2, 2)
-                        # Higher load in the evening (6pm - 10pm)
-                        load = random.uniform(85, 115) if 18 <= h <= 22 else random.uniform(40, 75)
-                        # Voltage drops under high load
-                        voltage = random.uniform(380, 398) if load > 85 else random.uniform(405, 420)
+                        temp = ambient_temp + temp_offset + random.uniform(-1, 1)
+                        # Normal load range: 40% to 80% (never exceeds 80% under normal operation)
+                        load = random.uniform(40, 80)
+                        # Normal voltage range: 405V to 420V
+                        voltage = random.uniform(405, 420)
                     
                     # Current is proportional to load
                     base_current = (float(t.rated_kva) * 1000.0) / (415.0 * 1.732) if t.rated_kva else 139.0
