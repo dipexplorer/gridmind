@@ -377,10 +377,11 @@ class RealAIModel:
         else:
             iforest_score = 15.0
             
+        iforest_category = "CRITICAL" if iforest_score >= 90 else ("WARNING" if iforest_score >= 70 else "HEALTHY")
         results["isolation_forest"] = {
             "anomaly_score": round(iforest_score, 1),
-            "risk_category": "CRITICAL" if iforest_score >= 90 else ("WARNING" if iforest_score >= 70 else "HEALTHY"),
-            "expected_lifetime_days": int((100 - iforest_score) * 36.5)
+            "risk_category": iforest_category,
+            "expected_lifetime_days": 7 if iforest_category == "CRITICAL" else (90 if iforest_category == "WARNING" else 365)
         }
         
         # Helper to load models dynamically if not cached
@@ -410,7 +411,7 @@ class RealAIModel:
         results["random_forest"] = {
             "anomaly_score": round(rf_score, 1),
             "risk_category": rf_category,
-            "expected_lifetime_days": int((100 - rf_score) * 36.5)
+            "expected_lifetime_days": 7 if rf_category == "CRITICAL" else (90 if rf_category == "WARNING" else 365)
         }
         
         # 3. XGBoost
@@ -439,7 +440,7 @@ class RealAIModel:
         results["xgboost"] = {
             "anomaly_score": round(xgb_score, 1),
             "risk_category": xgb_category,
-            "expected_lifetime_days": int((100 - xgb_score) * 36.5)
+            "expected_lifetime_days": 7 if xgb_category == "CRITICAL" else (90 if xgb_category == "WARNING" else 365)
         }
         
         return results

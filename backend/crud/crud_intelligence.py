@@ -28,7 +28,7 @@ def get_transformer_score(db: Session, transformer_id: str):
             lifetime_days = 7
         elif status == "warning":
             cat = "WARNING"
-            lifetime_days = 30
+            lifetime_days = 90
         elif status == "healthy":
             cat = "HEALTHY"
             lifetime_days = 365
@@ -39,7 +39,7 @@ def get_transformer_score(db: Session, transformer_id: str):
                 lifetime_days = 7
             elif anomaly_score_pct >= 70:
                 cat = "WARNING"
-                lifetime_days = 30
+                lifetime_days = 90
             else:
                 cat = "HEALTHY"
                 lifetime_days = 365
