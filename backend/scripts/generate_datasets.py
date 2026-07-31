@@ -26,17 +26,20 @@ def generate_all_datasets():
         os.makedirs(data_dir, exist_ok=True)
         logger.info(f"Ensuring data directory exists at: {data_dir}")
 
-        transformers = db.query(Transformer).all()
+        try:
+            transformers = db.query(Transformer).all()
+        except Exception as e:
+            logger.warning(f"Database connection failed, skipping dependent datasets: {e}")
+            transformers = []
+            
         if not transformers:
-            logger.error("No transformers found in database. Seed data first.")
-            return
-
-        logger.info(f"Loaded {len(transformers)} transformers from database.")
+            logger.warning("No transformers found in database. Proceeding with ML dataset generation only.")
 
         # ==========================================
         # 1. Generate telemetry_history.csv
         # ==========================================
-        logger.info("Generating telemetry_history.csv...")
+        if transformers:
+            logger.info("Generating telemetry_history.csv...")
         now = datetime.now(timezone.utc)
         telemetry_rows = []
 
@@ -141,79 +144,102 @@ def generate_all_datasets():
         logger.info(f"Saved {len(trend_df)} rows to {trend_path}")
 
         # ==========================================
-        # 3. Generate ml_training_dataset.csv (Stratified — realistic operational distribution)
+        # 3. Generate ml_training_dataset.csv (Forward Physics-Based Generation)
         # ==========================================
         logger.info("Generating ml_training_dataset.csv (10,000 samples)...")
         np.random.seed(42)
+        n_samples = 10000
 
-        # Stratified sampling to match real-world fleet distribution:
-        # 70% healthy, 15% warning, 15% critical
-        n_safe     = 7000
-        n_warning  = 1500
-        n_critical = 1500
-
-        # Stratified sampling to match real-world fleet distribution:
-        # 70% healthy, 15% warning, 15% critical
-        n_safe     = 7000
-        n_warning  = 1500
-        n_critical = 1500
-
-        # Helper distributions for metadata
-        kva_options = [100, 250, 500, 1000]
-        age_options = [1, 2, 3, 5, 8, 10, 12, 15, 20, 25]
-        ambient_options = [15.0, 20.0, 25.0, 30.0, 35.0, 40.0]
-
-        # --- HEALTHY ---
-        safe_kva = np.random.choice(kva_options, n_safe)
-        safe_age = np.random.choice(age_options, n_safe)
-        safe_ambient = np.random.choice(ambient_options, n_safe)
-        safe_load = np.random.uniform(20.0, 75.0, n_safe)
-        safe_voltage = 415.0 - (safe_load / 100.0) * 15.0 + np.random.uniform(-2, 2, n_safe)
-        safe_current = (safe_kva * 1000.0 * (safe_load / 100.0)) / (1.732 * safe_voltage) + np.random.uniform(-2, 2, n_safe)
-        safe_temp = safe_ambient + (safe_load / 100.0)**2 * 20.0 + safe_age * 0.5 + np.random.uniform(-1, 1, n_safe)
-        safe_labels = np.zeros(n_safe, dtype=int)
-
-        # --- WARNING ---
-        warn_kva = np.random.choice(kva_options, n_warning)
-        warn_age = np.random.choice(age_options, n_warning)
-        warn_ambient = np.random.choice(ambient_options, n_warning)
-        warn_load = np.random.uniform(80.0, 105.0, n_warning)
-        warn_voltage = 415.0 - (warn_load / 100.0) * 35.0 + np.random.uniform(-3, 3, n_warning)
-        warn_current = (warn_kva * 1000.0 * (warn_load / 100.0)) / (1.732 * warn_voltage) + np.random.uniform(-3, 3, n_warning)
-        warn_temp = warn_ambient + (warn_load / 100.0)**2 * 35.0 + warn_age * 0.8 + np.random.uniform(-2, 2, n_warning)
-        warn_labels = np.ones(n_warning, dtype=int)
-
-        # --- CRITICAL ---
-        crit_kva = np.random.choice(kva_options, n_critical)
-        crit_age = np.random.choice(age_options, n_critical)
-        crit_ambient = np.random.choice(ambient_options, n_critical)
-        crit_load = np.random.uniform(110.0, 140.0, n_critical)
-        crit_voltage = 415.0 - (crit_load / 100.0) * 55.0 + np.random.uniform(-3, 3, n_critical)
-        crit_current = (crit_kva * 1000.0 * (crit_load / 100.0)) / (1.732 * crit_voltage) + np.random.uniform(-3, 3, n_critical)
-        crit_temp = crit_ambient + (crit_load / 100.0)**2 * 45.0 + crit_age * 1.2 + np.random.uniform(-2, 2, n_critical)
-        crit_labels = np.full(n_critical, 2, dtype=int)
-
-        # Stack all classes together and shuffle
-        all_temp    = np.concatenate([safe_temp,    warn_temp,    crit_temp])
-        all_load    = np.concatenate([safe_load,    warn_load,    crit_load])
-        all_voltage = np.concatenate([safe_voltage, warn_voltage, crit_voltage])
-        all_current = np.concatenate([safe_current, warn_current, crit_current])
-        all_ambient = np.concatenate([safe_ambient, warn_ambient, crit_ambient])
-        all_age     = np.concatenate([safe_age,     warn_age,     crit_age])
-        all_kva     = np.concatenate([safe_kva,     warn_kva,     crit_kva])
-        all_labels  = np.concatenate([safe_labels,  warn_labels,  crit_labels])
-
-        shuffle_idx = np.random.permutation(len(all_labels))
-
+        # APDCL standard transformer capacities
+        kva_options = [25, 63, 100, 250, 315, 500]
+        
+        # Independent features
+        base_kva = np.random.choice(kva_options, n_samples)
+        # Age mostly between 6-15 years
+        base_age = np.clip(np.random.normal(10.5, 4.0, n_samples), 1, 25)
+        # Ambient temperature (continuous)
+        base_ambient = np.random.normal(29.0, 4.0, n_samples)
+        
+        # Load profile mixture to simulate healthy (majority) and stressed (minority) transformers
+        load_normal = np.random.normal(55, 15, int(n_samples * 0.75))
+        load_high = np.random.normal(85, 8, int(n_samples * 0.15))
+        load_over = np.random.normal(115, 15, int(n_samples * 0.10))
+        base_load = np.concatenate([load_normal, load_high, load_over])
+        np.random.shuffle(base_load)
+        base_load = np.clip(base_load, 10.0, 150.0)
+        
+        # Dynamic Power Factor (depends on load)
+        power_factor = 0.82 + (base_load / 150.0) * 0.16 + np.random.normal(0, 0.01, n_samples)
+        power_factor = np.clip(power_factor, 0.80, 0.98)
+        
+        # Physics-based dependent calculations
+        # Rated current
+        rated_current = (base_kva * 1000.0) / (1.732 * 415.0)
+        
+        # 1. Voltage Drop (depends on current & impedance)
+        # Z_ohms = 4.5% impedance = 0.045 * (415.0 / rated_current)
+        typical_impedance_ohms = 0.045 * (415.0 / rated_current)
+        
+        # Generate initial current approximation based on load
+        approx_current = rated_current * (base_load / 100.0)
+        voltage_drop = approx_current * typical_impedance_ohms
+        base_voltage = 415.0 - voltage_drop + np.random.normal(0, 1.5, n_samples)
+        
+        # 2. Current Formula
+        base_current = (base_kva * 1000.0 * (base_load / 100.0)) / (1.732 * base_voltage * power_factor) + np.random.normal(0, 2.0, n_samples)
+        # Clip current to max 1.5x rated current (breaker limit)
+        base_current = np.clip(base_current, 0, 1.5 * rated_current)
+        
+        # 3. Temperature (I^2R heating)
+        max_temp_rise = 45.0
+        aging_factor = base_age * 0.4
+        base_temp = base_ambient + (base_current / rated_current)**2 * max_temp_rise + aging_factor + np.random.normal(0, 1.5, n_samples)
+        
+        # Health Engine (Vectorized, physics-inspired penalties)
+        temp_penalty = (np.maximum(0.0, base_temp - 70.0) / 15.0) ** 2 * 12.0
+        load_penalty = (np.maximum(0.0, base_load - 80.0) / 20.0) ** 2 * 10.0
+        voltage_penalty = (np.abs(base_voltage - 415.0) / 20.0) ** 2 * 8.0
+        current_penalty = np.maximum(0.0, (base_current / rated_current) - 1.0) * 25.0
+        age_penalty = (base_age / 25.0) ** 1.8 * 12.0
+        
+        health = 100.0 - temp_penalty - load_penalty - voltage_penalty - current_penalty - age_penalty
+        health = np.clip(health, 0, 100)
+        
+        # Failure probability mapping (Sigmoid instead of linear)
+        failure_prob = 100.0 / (1.0 + np.exp(0.08 * (health - 45.0)))
+        
+        # Label generation directly from health score
+        labels = np.select(
+            [health >= 75.0, health >= 45.0],
+            [0, 1],
+            default=2
+        )
+        
+        # Feature Engineering columns
+        load_ratio = base_load / 100.0
+        current_ratio = base_current / rated_current
+        voltage_deviation = (415.0 - base_voltage) / 415.0
+        temperature_rise = base_temp - base_ambient
+        # Stress index increases with age
+        stress_index = current_ratio * temperature_rise * (1.0 + 0.05 * base_age)
+        
         train_df = pd.DataFrame({
-            "temperature_c":       np.round(all_temp[shuffle_idx], 2),
-            "load_percentage":     np.round(all_load[shuffle_idx], 2),
-            "voltage_lv":          np.round(all_voltage[shuffle_idx], 1),
-            "current_a":           np.round(all_current[shuffle_idx], 1),
-            "ambient_temperature": np.round(all_ambient[shuffle_idx], 1),
-            "age_years":           all_age[shuffle_idx],
-            "rated_kva":           all_kva[shuffle_idx],
-            "risk_label":          all_labels[shuffle_idx]
+            "temperature_c":       np.round(base_temp, 2),
+            "load_percentage":     np.round(base_load, 2),
+            "voltage_lv":          np.round(base_voltage, 1),
+            "current_a":           np.round(base_current, 1),
+            "ambient_temperature": np.round(base_ambient, 1),
+            "age_years":           np.round(base_age, 1),
+            "rated_kva":           base_kva,
+            "power_factor":        np.round(power_factor, 2),
+            "load_ratio":          np.round(load_ratio, 3),
+            "current_ratio":       np.round(current_ratio, 3),
+            "voltage_deviation":   np.round(voltage_deviation, 3),
+            "temperature_rise":    np.round(temperature_rise, 2),
+            "stress_index":        np.round(stress_index, 3),
+            "health_score":        np.round(health, 1),
+            "failure_probability": np.round(failure_prob, 1),
+            "risk_label":          labels
         })
 
         train_path = os.path.join(data_dir, "ml_training_dataset.csv")
@@ -224,59 +250,61 @@ def generate_all_datasets():
         # ==========================================
         # 4. Generate seed_transformers.csv (Baseline Database Snapshot)
         # ==========================================
-        logger.info("Generating seed_transformers.csv...")
-        seed_rows = []
+        if transformers:
+            logger.info("Generating seed_transformers.csv...")
+            seed_rows = []
+    
+            # Cache substations and feeders to prevent 3300+ database round-trips
+            substations_cache = {s.id: s for s in db.query(Substation).all()}
+            feeders_cache = {f.id: f for f in db.query(Feeder).all()}
 
-        # Cache substations and feeders to prevent 3300+ database round-trips
-        substations_cache = {s.id: s for s in db.query(Substation).all()}
-        feeders_cache = {f.id: f for f in db.query(Feeder).all()}
-
-        for idx, t in enumerate(transformers):
-            # Extract longitude/latitude from PostGIS Geography
-            lon, lat = 91.74, 26.14
-            try:
-                from geoalchemy2.shape import to_shape
-                if t.location:
-                    point = to_shape(t.location)
-                    lon, lat = float(point.x), float(point.y)
-            except Exception:
-                pass
-
-            sub = substations_cache.get(t.substation_id)
-            fd = feeders_cache.get(t.feeder_id)
-
-            seed_rows.append({
-                "transformer_id": str(t.id),
-                "transformer_code": t.transformer_code,
-                "substation_code": sub.code if sub else "SS_133",
-                "substation_name": sub.name if sub else "Unknown Substation",
-                "feeder_code": fd.code if fd else "FD_UNKNOWN",
-                "feeder_name": fd.name if fd else "Unknown Feeder",
-                "rated_kva": float(t.rated_kva),
-                "age_years": int(t.age_years or 10),
-                "is_metered": bool(t.is_metered),
-                "current_load_pct": float(t.current_load_pct or 50.0),
-                "current_oil_temp_c": float(t.current_oil_temp_c or 45.0),
-                "current_health_score": int(t.current_health_score or 90),
-                "current_failure_risk": float(t.current_failure_risk or 0.1),
-                "current_status": t.current_status or "healthy",
-                "longitude": lon,
-                "latitude": lat,
-                "num_consumers": int(t.num_consumers or 50),
-                "manufacturer": t.manufacturer or "BHEL",
-                "cooling_type": t.cooling_type or "ONAN",
-                "installation_date": t.installation_date.isoformat() if t.installation_date else "2015-01-01",
-                "is_flood_prone": bool(t.is_flood_prone),
-                "is_high_lightning": bool(t.is_high_lightning),
-                "address_text": t.address_text or "",
-                "district": t.district or "Cachar",
-                "operational_status": t.operational_status or "IN_SERVICE"
-            })
-
-        seed_df = pd.DataFrame(seed_rows)
-        seed_path = os.path.join(data_dir, "seed_transformers.csv")
-        seed_df.to_csv(seed_path, index=False)
-        logger.info(f"Saved {len(seed_df)} transformer records to {seed_path}")
+        if transformers:
+            for idx, t in enumerate(transformers):
+                # Extract longitude/latitude from PostGIS Geography
+                lon, lat = 91.74, 26.14
+                try:
+                    from geoalchemy2.shape import to_shape
+                    if t.location:
+                        point = to_shape(t.location)
+                        lon, lat = float(point.x), float(point.y)
+                except Exception:
+                    pass
+    
+                sub = substations_cache.get(t.substation_id)
+                fd = feeders_cache.get(t.feeder_id)
+    
+                seed_rows.append({
+                    "transformer_id": str(t.id),
+                    "transformer_code": t.transformer_code,
+                    "substation_code": sub.code if sub else "SS_133",
+                    "substation_name": sub.name if sub else "Unknown Substation",
+                    "feeder_code": fd.code if fd else "FD_UNKNOWN",
+                    "feeder_name": fd.name if fd else "Unknown Feeder",
+                    "rated_kva": float(t.rated_kva),
+                    "age_years": int(t.age_years or 10),
+                    "is_metered": bool(t.is_metered),
+                    "current_load_pct": float(t.current_load_pct or 50.0),
+                    "current_oil_temp_c": float(t.current_oil_temp_c or 45.0),
+                    "current_health_score": int(t.current_health_score or 90),
+                    "current_failure_risk": float(t.current_failure_risk or 0.1),
+                    "current_status": t.current_status or "healthy",
+                    "longitude": lon,
+                    "latitude": lat,
+                    "num_consumers": int(t.num_consumers or 50),
+                    "manufacturer": t.manufacturer or "BHEL",
+                    "cooling_type": t.cooling_type or "ONAN",
+                    "installation_date": t.installation_date.isoformat() if t.installation_date else "2015-01-01",
+                    "is_flood_prone": bool(t.is_flood_prone),
+                    "is_high_lightning": bool(t.is_high_lightning),
+                    "address_text": t.address_text or "",
+                    "district": t.district or "Cachar",
+                    "operational_status": t.operational_status or "IN_SERVICE"
+                })
+    
+            seed_df = pd.DataFrame(seed_rows)
+            seed_path = os.path.join(data_dir, "seed_transformers.csv")
+            seed_df.to_csv(seed_path, index=False)
+            logger.info(f"Saved {len(seed_df)} transformer records to {seed_path}")
 
         # ==========================================
         # 5. Generate lstm_training_data.npz

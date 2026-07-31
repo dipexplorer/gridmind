@@ -58,7 +58,41 @@ class Settings(BaseSettings):
 
     # ─── ML Models ────────────────────────────────────────────────────────────
     MODEL_DIR: str = "ml_models"
-    ANOMALY_CONTAMINATION: float = 0.05   # 5% of transformers expected to be anomalous
+    # Actual anomaly rate in physical dataset: (WARNING + CRITICAL) / total
+    # (344 + 869) / 10000 ≈ 0.12 — set here, read by train_production_models.py
+    ANOMALY_CONTAMINATION: float = 0.12
+
+    # Fusion weights for Health Score calculation
+    HEALTH_WEIGHT_IF: float = 0.25
+    HEALTH_WEIGHT_XGB: float = 0.35
+    HEALTH_WEIGHT_COX: float = 0.25
+    HEALTH_WEIGHT_PHYSICS: float = 0.15
+
+    # Physics nominal limits
+    NOMINAL_VOLTAGE: float = 415.0
+    TEMPERATURE_LIMIT_CRITICAL: float = 85.0
+    TEMPERATURE_LIMIT_WARNING: float = 70.0
+    LOAD_LIMIT_CRITICAL: float = 115.0
+    LOAD_LIMIT_WARNING: float = 90.0
+    VOLTAGE_LIMIT_CRITICAL: float = 380.0
+    VOLTAGE_LIMIT_WARNING: float = 395.0
+
+    # Telemetry validation bounds (reject readings outside these limits)
+    TEMP_MIN_VALID: float = -10.0
+    TEMP_MAX_VALID: float = 160.0
+    VOLTAGE_MIN_VALID: float = 200.0
+    VOLTAGE_MAX_VALID: float = 500.0
+    CURRENT_MIN_VALID: float = 0.0
+    CURRENT_MAX_VALID: float = 10000.0
+    LOAD_MIN_VALID: float = 0.0
+    LOAD_MAX_VALID: float = 200.0
+
+    # Default transformer metadata used when DB columns are NULL
+    DEFAULT_AGE_YEARS: int = 10
+    DEFAULT_RATED_KVA: float = 500.0
+
+    # Batch job settings
+    BATCH_COMMIT_EVERY: int = 100   # commit every N transformers
 
     class Config:
         env_file = ".env"            # Load from .env file if it exists

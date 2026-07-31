@@ -30,12 +30,23 @@ def train_production_models():
     df = pd.read_csv(csv_path)
     
     # 1. Train Isolation Forest (Production Anomaly Detection)
-    features = ["temperature_c", "load_percentage", "voltage_lv", "current_a", "ambient_temperature", "age_years", "rated_kva"]
+    features = [
+        "temperature_c", "load_percentage", "voltage_lv", 
+        "current_a", "ambient_temperature", "age_years", 
+        "rated_kva", "power_factor",
+        "load_ratio", "current_ratio", "voltage_deviation", 
+        "temperature_rise", "stress_index"
+    ]
     X = df[features]
     
     # Fit unsupervised Isolation Forest
-    # contamination=0.30 matches our stratified training set: 15% warning + 15% critical = 30% anomalies
-    model = IsolationForest(n_estimators=150, contamination=0.30, random_state=42)
+    # contamination = actual anomaly rate: (WARNING + CRITICAL) / total
+    # With corrected physics: ~(344 + 869) / 10000 ≈ 0.12
+    # Pulled from config so it can be overridden via environment variable.
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from core.config import settings
+    contamination = settings.ANOMALY_CONTAMINATION  # default: 0.05, set to 0.12 in config
+    model = IsolationForest(n_estimators=150, contamination=contamination, random_state=42)
     model.fit(X)
     
     # Save model
@@ -61,12 +72,9 @@ def train_production_models():
             durations.append(np.random.randint(90, 3650))  # Lasts up to 10 years
             events.append(np.random.choice([0, 1], p=[0.85, 0.15]))  # Low chance of random failure
             
-    df_survival = pd.DataFrame({
-        "temperature_c": df["temperature_c"],
-        "load_percentage": df["load_percentage"],
-        "duration": durations,
-        "event": events
-    })
+    df_survival = df[features].copy()
+    df_survival["duration"] = durations
+    df_survival["event"] = events
     
     # Add small random noise to duration to prevent ties in lifelines fitting
     df_survival["duration"] = df_survival["duration"] + np.random.uniform(0.01, 0.1, size=len(df_survival))
@@ -78,6 +86,24 @@ def train_production_models():
     # Save survival model
     joblib.dump(cph, os.path.join(model_dir, "survival_model.pkl"))
     print("Successfully trained and saved Cox Survival model to ml_models/survival_model.pkl")
+
+    # 3. Train Benchmark XGBoost & Random Forest
+    from xgboost import XGBClassifier
+    from sklearn.ensemble import RandomForestClassifier
+
+    y = df["risk_label"]
+
+    print("Training benchmark Random Forest...")
+    rf = RandomForestClassifier(n_estimators=100, random_state=42)
+    rf.fit(X, y)
+    joblib.dump(rf, os.path.join(model_dir, "benchmark_random_forest.pkl"))
+    print("Successfully saved Random Forest benchmark.")
+
+    print("Training benchmark XGBoost...")
+    xgb = XGBClassifier(n_estimators=100, random_state=42, use_label_encoder=False, eval_metric="mlogloss")
+    xgb.fit(X, y)
+    joblib.dump(xgb, os.path.join(model_dir, "benchmark_xgboost.pkl"))
+    print("Successfully saved XGBoost benchmark.")
 
 if __name__ == "__main__":
     train_production_models()

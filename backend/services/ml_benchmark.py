@@ -58,7 +58,12 @@ def generate_labeled_dataset(n_samples: int = 10000, random_state: int = 42) -> 
     if n_samples and n_samples < len(df):
         df = df.sample(n=n_samples, random_state=random_state)
         
-    feature_names = ["temperature_c", "load_percentage", "voltage_lv", "current_a", "ambient_temperature", "age_years", "rated_kva"]
+    feature_names = [
+        "temperature_c", "load_percentage", "voltage_lv", "current_a", 
+        "ambient_temperature", "age_years", "rated_kva", "power_factor",
+        "load_ratio", "current_ratio", "voltage_deviation", 
+        "temperature_rise", "stress_index"
+    ]
     X = df[feature_names].values
     y = df["risk_label"].values
     
