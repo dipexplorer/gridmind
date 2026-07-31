@@ -223,6 +223,30 @@ export default function Dashboard() {
     document.body.removeChild(link);
   };
 
+  const exportTransformersToCSV = () => {
+    if (filteredData.length === 0) return;
+    const headers = ["Transformer Code", "Name", "Substation", "Status", "Risk Category", "Anomaly Score (%)", "Capacity (kVA)"];
+    const rows = filteredData.map(t => [
+      t.transformer_code,
+      `"${t.name || ''}"`,
+      `"${t.substation_name || ''}"`,
+      t.operational_status || '',
+      t.risk_category,
+      t.anomaly_score.toFixed(1),
+      t.rated_kva
+    ]);
+    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `gridmind_transformers_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (loading) {
     return (
       <div className="flex h-[80vh] items-center justify-center">
@@ -247,6 +271,13 @@ export default function Dashboard() {
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block"></span>
             {lastRefreshed}
           </span>
+          <button
+            onClick={exportTransformersToCSV}
+            className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-1.5 rounded-full text-xs font-bold transition-colors"
+          >
+            <Download size={13} />
+            Export CSV
+          </button>
           <button
             onClick={triggerAIScan}
             disabled={refreshing || scanning}

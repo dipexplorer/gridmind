@@ -294,10 +294,7 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                 <LayoutDashboard size={12} /> Dashboard
               </Link>
               <ChevronRight size={12} />
-              <Link href="/assets" className="hover:text-slate-700 transition-colors flex items-center gap-1">
-                <Layers size={12} /> Assets
-              </Link>
-              <ChevronRight size={12} />
+
               <span className="text-slate-600 font-bold">{detail.transformer_code}</span>
             </div>
 
