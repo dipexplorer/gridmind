@@ -45,6 +45,28 @@ class RealAIModel:
         """
         return float(np.clip((0.5 - raw) * 100.0, 0.0, 100.0))
 
+    def calibrate_anomaly_score(self, score: float, category: str) -> float:
+        """
+        Calibrates the unsupervised Isolation Forest anomaly score to align with
+        the supervised XGBoost category boundaries:
+        - CRITICAL: [90.0, 100.0]
+        - WARNING:  [70.0, 89.9]
+        - HEALTHY:  [0.0, 69.9]
+        """
+        category = category.upper()
+        if category == "CRITICAL":
+            base = 90.0
+            contrib = (score / 100.0) * 10.0
+            return float(np.clip(base + contrib, 90.0, 100.0))
+        elif category == "WARNING":
+            base = 70.0
+            contrib = (score / 100.0) * 19.9
+            return float(np.clip(base + contrib, 70.0, 89.9))
+        else:  # HEALTHY
+            if score >= 70.0:
+                return float(np.clip(50.0 + (score - 70.0) * 0.5, 0.0, 69.9))
+            return float(np.clip(score, 0.0, 69.9))
+
     def load_models_if_needed(self):
         with self._lock:
             if not self._models_loaded:
@@ -190,13 +212,21 @@ class RealAIModel:
             # Clip final anomaly score to [0.0, 100.0] after weather penalty
             anomaly_score = min(100.0, max(0.0, anomaly_score))
 
-            # Categorize Risk — 3-Tier Traffic Light System (Static Thresholds)
-            if anomaly_score >= 90:
-                category = "CRITICAL"
-            elif anomaly_score >= 70:
-                category = "WARNING"
+            # Categorize Risk using XGBoost (Supervised Classification)
+            if self.xgb_model is not None:
+                xgb_pred = int(self.xgb_model.predict(df_x)[0])
+                category_map = {0: "HEALTHY", 1: "WARNING", 2: "CRITICAL"}
+                category = category_map.get(xgb_pred, "HEALTHY")
             else:
-                category = "HEALTHY"
+                if anomaly_score >= 90:
+                    category = "CRITICAL"
+                elif anomaly_score >= 70:
+                    category = "WARNING"
+                else:
+                    category = "HEALTHY"
+
+            # Calibrate Isolation Forest score using the category bounds
+            anomaly_score = self.calibrate_anomaly_score(anomaly_score, category)
 
             # 4. Compute SHAP explainability
             # TreeExplainer calculates shapley values for the decision function
@@ -297,6 +327,9 @@ class RealAIModel:
                     category = "WARNING"
                 else:
                     category = "HEALTHY"
+
+            # Calibrate daily anomaly score based on the predicted category
+            daily_anomaly_score = self.calibrate_anomaly_score(daily_anomaly_score, category)
 
             shap_list = []
             if calculate_shap and self.explainer is not None:
