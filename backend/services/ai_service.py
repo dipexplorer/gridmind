@@ -162,10 +162,7 @@ class RealAIModel:
             # Higher score is normal, lower/negative score is anomalous
             raw_score = self.model.decision_function(df_x)[0]
             
-            # Map raw score to 0-100 percentage (where 100 is highly anomalous)
-            # Normal data usually has raw_score > 0 (e.g. 0.1 to 0.3)
-            # Anomalies have raw_score < 0
-            anomaly_score = 35 - (raw_score * 350)
+            anomaly_score = self.raw_to_anomaly_score(raw_score)
 
             # LIVE WEATHER INTEGRATION (Phase 1)
             # Fetch transformer coordinates to get ambient temperature
@@ -190,8 +187,8 @@ class RealAIModel:
                 heat_stress_penalty = min(15.0, (ambient_temp - 35.0) * 2.0)
                 anomaly_score += heat_stress_penalty
 
-            # Calibrate anomaly score to align with frontend thresholds
-            anomaly_score = self.calibrate_anomaly_score(anomaly_score)
+            # Clip final anomaly score to [0.0, 100.0] after weather penalty
+            anomaly_score = min(100.0, max(0.0, anomaly_score))
 
             # Categorize Risk — 3-Tier Traffic Light System (Static Thresholds)
             if anomaly_score >= 90:
@@ -376,7 +373,7 @@ class RealAIModel:
         # 1. Isolation Forest (Production)
         if self.model is not None:
             raw_score = self.model.decision_function(df_x)[0]
-            iforest_score = self.calibrate_anomaly_score(max(0.0, min(100.0, float(35 - (raw_score * 350)))))
+            iforest_score = self.raw_to_anomaly_score(raw_score)
         else:
             iforest_score = 15.0
             
