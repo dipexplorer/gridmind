@@ -73,8 +73,8 @@ async def startup_event():
     load_data_caches()
     
     # Pre-load PyTorch LSTM inference engine
-    from services.deep_learning import get_lstm_inference_engine
-    get_lstm_inference_engine()
+    # from services.deep_learning import get_lstm_inference_engine
+    # get_lstm_inference_engine()
     
     import threading
     threading.Thread(target=schedule_daily_batch, daemon=True).start()
