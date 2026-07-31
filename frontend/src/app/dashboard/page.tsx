@@ -232,7 +232,7 @@ export default function Dashboard() {
       `"${t.substation_name || ''}"`,
       t.operational_status || '',
       t.risk_category,
-      t.anomaly_score.toFixed(1),
+      (t.anomaly_score ?? 0).toFixed(1),
       t.rated_kva
     ]);
     const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
