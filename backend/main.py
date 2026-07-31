@@ -43,14 +43,15 @@ async def health_check():
 def schedule_daily_batch():
     """
     Background thread to execute daily ML predictions batch run automatically.
-    First execution starts 24 hours after server startup to avoid startup CPU/RAM spikes and Render timeouts.
+    First execution starts 30 seconds after server startup to ensure the server starts up instantly
+    and passes Render's health checks, then runs the daily batch prediction to refresh statuses.
     """
     import time
     import logging
     logger = logging.getLogger("startup_scheduler")
-    logger.info("Daily batch prediction scheduler initialized. First run scheduled in 24 hours.")
-    # Sleep for 24 hours before the first run
-    time.sleep(86400)
+    logger.info("Daily batch prediction scheduler initialized. First run scheduled in 30 seconds.")
+    # Sleep for 30 seconds before the first run to allow FastAPI to start and pass health check
+    time.sleep(30)
     from scripts.predict_daily_batch import run_batch_prediction
     while True:
         try:
