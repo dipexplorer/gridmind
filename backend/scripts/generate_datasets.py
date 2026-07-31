@@ -68,22 +68,28 @@ def generate_all_datasets():
                 seed_str = f"{t.id}_{time_pt.strftime('%Y%m%d%H')}"
                 local_random = random.Random(seed_str)
 
-                if is_critical:
-                    temp = ambient_temp + local_random.uniform(55, 75)
-                    load = local_random.uniform(105, 135)
-                    voltage = local_random.uniform(350, 375)
-                elif is_warning:
-                    temp = ambient_temp + local_random.uniform(35, 55)
-                    load = local_random.uniform(85, 110)
-                    voltage = local_random.uniform(370, 395)
-                else:
-                    temp_offset = local_random.uniform(5, 12) if 11 <= hour <= 16 else local_random.uniform(0, 4)
-                    temp = ambient_temp + temp_offset + local_random.uniform(-1, 1)
-                    load = local_random.uniform(40, 80)
-                    voltage = local_random.uniform(405, 420)
+                rated_kva = float(t.rated_kva) if t.rated_kva else 500.0
+                age_years = int(t.age_years) if t.age_years else 10
 
-                base_current = (float(t.rated_kva) * 1000.0) / (415.0 * 1.732) if t.rated_kva else 139.0
-                current = base_current * (load / 100.0) + local_random.uniform(-5, 5)
+                if is_critical:
+                    load = local_random.uniform(110, 140)
+                    voltage = 415.0 - (load / 100.0) * 55.0 + local_random.uniform(-3, 3)
+                    temp = ambient_temp + (load / 100.0)**2 * 45.0 + age_years * 1.2 + local_random.uniform(-2, 2)
+                elif is_warning:
+                    load = local_random.uniform(80, 105)
+                    voltage = 415.0 - (load / 100.0) * 35.0 + local_random.uniform(-3, 3)
+                    temp = ambient_temp + (load / 100.0)**2 * 35.0 + age_years * 0.8 + local_random.uniform(-2, 2)
+                else:
+                    load_base = local_random.uniform(30, 60)
+                    if 18 <= hour <= 22:
+                        load = load_base + local_random.uniform(15, 25)
+                    else:
+                        load = load_base + local_random.uniform(-5, 5)
+                    voltage = 415.0 - (load / 100.0) * 15.0 + local_random.uniform(-2, 2)
+                    temp_offset = local_random.uniform(5, 12) if 11 <= hour <= 16 else local_random.uniform(0, 4)
+                    temp = ambient_temp + temp_offset + (load / 100.0)**2 * 20.0 + age_years * 0.5 + local_random.uniform(-1, 1)
+
+                current = (rated_kva * 1000.0 * (load / 100.0)) / (1.732 * voltage) + local_random.uniform(-2, 2)
 
                 telemetry_rows.append({
                     "transformer_id": str(t.id),
@@ -146,42 +152,68 @@ def generate_all_datasets():
         n_warning  = 1500
         n_critical = 1500
 
-        # --- HEALTHY: tight normal operating ranges ---
-        safe_temp    = np.random.uniform(25.0, 70.0, n_safe)
-        safe_load    = np.random.uniform(15.0, 80.0, n_safe)
-        safe_voltage = np.random.uniform(395.0, 430.0, n_safe)
-        safe_current = safe_load * np.random.uniform(2.0, 4.0, n_safe)
-        safe_labels  = np.zeros(n_safe, dtype=int)
+        # Stratified sampling to match real-world fleet distribution:
+        # 70% healthy, 15% warning, 15% critical
+        n_safe     = 7000
+        n_warning  = 1500
+        n_critical = 1500
 
-        # --- WARNING: elevated stress ranges ---
-        warn_temp    = np.random.uniform(70.0, 85.0, n_warning)
-        warn_load    = np.random.uniform(80.0, 110.0, n_warning)
-        warn_voltage = np.random.uniform(370.0, 395.0, n_warning)
-        warn_current = warn_load * np.random.uniform(2.5, 4.5, n_warning)
-        warn_labels  = np.ones(n_warning, dtype=int)
+        # Helper distributions for metadata
+        kva_options = [100, 250, 500, 1000]
+        age_options = [1, 2, 3, 5, 8, 10, 12, 15, 20, 25]
+        ambient_options = [15.0, 20.0, 25.0, 30.0, 35.0, 40.0]
 
-        # --- CRITICAL: severe anomaly ranges ---
-        crit_temp    = np.random.uniform(85.0, 115.0, n_critical)
-        crit_load    = np.random.uniform(110.0, 140.0, n_critical)
-        crit_voltage = np.random.uniform(350.0, 370.0, n_critical)
-        crit_current = crit_load * np.random.uniform(3.0, 5.0, n_critical)
-        crit_labels  = np.full(n_critical, 2, dtype=int)
+        # --- HEALTHY ---
+        safe_kva = np.random.choice(kva_options, n_safe)
+        safe_age = np.random.choice(age_options, n_safe)
+        safe_ambient = np.random.choice(ambient_options, n_safe)
+        safe_load = np.random.uniform(20.0, 75.0, n_safe)
+        safe_voltage = 415.0 - (safe_load / 100.0) * 15.0 + np.random.uniform(-2, 2, n_safe)
+        safe_current = (safe_kva * 1000.0 * (safe_load / 100.0)) / (1.732 * safe_voltage) + np.random.uniform(-2, 2, n_safe)
+        safe_temp = safe_ambient + (safe_load / 100.0)**2 * 20.0 + safe_age * 0.5 + np.random.uniform(-1, 1, n_safe)
+        safe_labels = np.zeros(n_safe, dtype=int)
+
+        # --- WARNING ---
+        warn_kva = np.random.choice(kva_options, n_warning)
+        warn_age = np.random.choice(age_options, n_warning)
+        warn_ambient = np.random.choice(ambient_options, n_warning)
+        warn_load = np.random.uniform(80.0, 105.0, n_warning)
+        warn_voltage = 415.0 - (warn_load / 100.0) * 35.0 + np.random.uniform(-3, 3, n_warning)
+        warn_current = (warn_kva * 1000.0 * (warn_load / 100.0)) / (1.732 * warn_voltage) + np.random.uniform(-3, 3, n_warning)
+        warn_temp = warn_ambient + (warn_load / 100.0)**2 * 35.0 + warn_age * 0.8 + np.random.uniform(-2, 2, n_warning)
+        warn_labels = np.ones(n_warning, dtype=int)
+
+        # --- CRITICAL ---
+        crit_kva = np.random.choice(kva_options, n_critical)
+        crit_age = np.random.choice(age_options, n_critical)
+        crit_ambient = np.random.choice(ambient_options, n_critical)
+        crit_load = np.random.uniform(110.0, 140.0, n_critical)
+        crit_voltage = 415.0 - (crit_load / 100.0) * 55.0 + np.random.uniform(-3, 3, n_critical)
+        crit_current = (crit_kva * 1000.0 * (crit_load / 100.0)) / (1.732 * crit_voltage) + np.random.uniform(-3, 3, n_critical)
+        crit_temp = crit_ambient + (crit_load / 100.0)**2 * 45.0 + crit_age * 1.2 + np.random.uniform(-2, 2, n_critical)
+        crit_labels = np.full(n_critical, 2, dtype=int)
 
         # Stack all classes together and shuffle
         all_temp    = np.concatenate([safe_temp,    warn_temp,    crit_temp])
         all_load    = np.concatenate([safe_load,    warn_load,    crit_load])
         all_voltage = np.concatenate([safe_voltage, warn_voltage, crit_voltage])
         all_current = np.concatenate([safe_current, warn_current, crit_current])
+        all_ambient = np.concatenate([safe_ambient, warn_ambient, crit_ambient])
+        all_age     = np.concatenate([safe_age,     warn_age,     crit_age])
+        all_kva     = np.concatenate([safe_kva,     warn_kva,     crit_kva])
         all_labels  = np.concatenate([safe_labels,  warn_labels,  crit_labels])
 
         shuffle_idx = np.random.permutation(len(all_labels))
 
         train_df = pd.DataFrame({
-            "temperature_c":   np.round(all_temp[shuffle_idx], 2),
-            "load_percentage": np.round(all_load[shuffle_idx], 2),
-            "voltage_lv":      np.round(all_voltage[shuffle_idx], 1),
-            "current_a":       np.round(all_current[shuffle_idx], 1),
-            "risk_label":      all_labels[shuffle_idx]
+            "temperature_c":       np.round(all_temp[shuffle_idx], 2),
+            "load_percentage":     np.round(all_load[shuffle_idx], 2),
+            "voltage_lv":          np.round(all_voltage[shuffle_idx], 1),
+            "current_a":           np.round(all_current[shuffle_idx], 1),
+            "ambient_temperature": np.round(all_ambient[shuffle_idx], 1),
+            "age_years":           all_age[shuffle_idx],
+            "rated_kva":           all_kva[shuffle_idx],
+            "risk_label":          all_labels[shuffle_idx]
         })
 
         train_path = os.path.join(data_dir, "ml_training_dataset.csv")

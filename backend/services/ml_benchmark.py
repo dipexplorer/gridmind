@@ -58,9 +58,9 @@ def generate_labeled_dataset(n_samples: int = 10000, random_state: int = 42) -> 
     if n_samples and n_samples < len(df):
         df = df.sample(n=n_samples, random_state=random_state)
         
-    X = df[["temperature_c", "load_percentage", "voltage_lv", "current_a"]].values
+    feature_names = ["temperature_c", "load_percentage", "voltage_lv", "current_a", "ambient_temperature", "age_years", "rated_kva"]
+    X = df[feature_names].values
     y = df["risk_label"].values
-    feature_names = ["temperature_c", "load_percentage", "voltage_lv", "current_a"]
     
     logger.info(f"Loaded {len(df)} training samples from CSV: "
                 f"SAFE={sum(y==0)}, WARNING={sum(y==1)}, CRITICAL={sum(y==2)}")
@@ -108,7 +108,7 @@ def get_benchmark_models() -> dict:
 
 # ─── Step 3: Training, Evaluation, and Metrics Calculation ────────────────────
 
-def run_benchmark(save_path: str = "ml_models/benchmark_results.json") -> dict:
+def run_benchmark(save_path: str = None) -> dict:
     """
     Runs the Random Forest vs XGBoost benchmark pipeline:
       1. Generate labeled dataset.
@@ -121,6 +121,9 @@ def run_benchmark(save_path: str = "ml_models/benchmark_results.json") -> dict:
         dict: Complete benchmark results with all metrics and ROC data.
     """
     logger.info("=== GridMind ML Benchmark Starting ===")
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if save_path is None:
+        save_path = os.path.join(base_dir, "ml_models", "benchmark_results.json")
 
     # Step 1: Generate data
     X, y, feature_names = generate_labeled_dataset(n_samples=10000)
@@ -196,7 +199,7 @@ def run_benchmark(save_path: str = "ml_models/benchmark_results.json") -> dict:
 
         # Save each trained model
         safe_name = model_name.lower().replace(" ", "_")
-        joblib.dump(model, f"ml_models/benchmark_{safe_name}.pkl")
+        joblib.dump(model, os.path.join(base_dir, "ml_models", f"benchmark_{safe_name}.pkl"))
 
     # ─── Identify Best Model ──────────────────────────────────────────────────
     best_model = max(all_results, key=lambda m: all_results[m]["roc_auc"])
@@ -217,7 +220,7 @@ def run_benchmark(save_path: str = "ml_models/benchmark_results.json") -> dict:
     }
 
     # Save the benchmark results
-    os.makedirs("ml_models", exist_ok=True)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
     with open(save_path, "w") as f:
         json.dump(report, f, indent=2)
 

@@ -76,7 +76,13 @@ def run_batch_prediction():
                         readings.append(TelemetryReading(40.0, 50.0, 415.0, 100.0))
 
                 # Run Batch ML Predictor without SHAP calculations (not saved to DB)
-                pred = ai_service.predict_daily_health(str(t.id), readings, calculate_shap=False)
+                pred = ai_service.predict_daily_health(
+                    str(t.id),
+                    readings,
+                    calculate_shap=False,
+                    age_years=int(t.age_years) if t.age_years is not None else 10,
+                    rated_kva=float(t.rated_kva) if t.rated_kva is not None else 500.0
+                )
                 shap_values = pred.pop("shap_values", [])
 
                 # Translate predictions to database properties

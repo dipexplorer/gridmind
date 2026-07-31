@@ -27,7 +27,7 @@ class RealAIModel:
     """
     
     def __init__(self):
-        self.features = ["temperature_c", "load_percentage", "voltage_lv", "current_a"]
+        self.features = ["temperature_c", "load_percentage", "voltage_lv", "current_a", "ambient_temperature", "age_years", "rated_kva"]
         self.model = None          # Isolation Forest (anomaly score)
         self.xgb_model = None      # XGBoost (status classification)
         self.survival_model = None
@@ -162,55 +162,42 @@ class RealAIModel:
             from models.asset import Transformer
             t = db.query(Transformer).filter(Transformer.id == transformer_id).first()
 
-            if not t:
-                load_pct = 45.0
-                v_lv = 415.0
-                curr_a = 60.0
-                temp_c = 40.0
-            else:
+            lat = 26.14
+            lon = 91.74
+            age_years = 10
+            rated_kva = 500.0
+
+            if t:
                 load_pct = float(t.current_load_pct) if t.current_load_pct is not None else 45.0
                 temp_c = float(t.current_oil_temp_c) if t.current_oil_temp_c is not None else 40.0
-                # Synthesize voltage and current corresponding to the stored load
-                v_lv = random.uniform(380, 398) if load_pct > 85 else random.uniform(405, 420)
-                base_current = (t.rated_kva * 1000) / (415 * 1.732) if t.rated_kva else 139.0
-                curr_a = base_current * (load_pct / 100.0) + random.uniform(-2, 2)
+                age_years = int(t.age_years) if t.age_years is not None else 10
+                rated_kva = float(t.rated_kva) if t.rated_kva is not None else 500.0
+                try:
+                    from geoalchemy2.shape import to_shape
+                    if t.location:
+                        point = to_shape(t.location)
+                        lat = float(point.y)
+                        lon = float(point.x)
+                except Exception:
+                    pass
+            else:
+                load_pct = 45.0
+                temp_c = 40.0
 
-            # 2. Structure feature vector
-            x = np.array([[temp_c, load_pct, v_lv, curr_a]])
+            # Synthesize voltage and current using physics-aware formulas
+            v_lv = 415.0 - (load_pct / 100.0) * (35.0 if load_pct > 80 else 15.0) + random.uniform(-2, 2)
+            curr_a = (rated_kva * 1000.0 * (load_pct / 100.0)) / (1.732 * v_lv) + random.uniform(-1, 1)
+
+            # Fetch live weather (ambient temperature)
+            ambient_temp = self._fetch_live_weather(lat, lon)
+
+            # 2. Structure feature vector (with 7 features)
+            x = np.array([[temp_c, load_pct, v_lv, curr_a, ambient_temp, age_years, rated_kva]])
             df_x = pd.DataFrame(x, columns=self.features)
 
             # 3. Predict Anomaly Score (Isolation Forest decision_function)
-            # decision_function returns value in range roughly [-0.5, 0.5]
-            # Higher score is normal, lower/negative score is anomalous
             raw_score = self.model.decision_function(df_x)[0]
-            
             anomaly_score = self.raw_to_anomaly_score(raw_score)
-
-            # LIVE WEATHER INTEGRATION (Phase 1)
-            # Fetch transformer coordinates to get ambient temperature
-            from models.asset import Transformer
-            transformer = db.query(Transformer).filter(Transformer.id == transformer_id).first()
-            lat = 26.14
-            lon = 91.74
-            try:
-                from geoalchemy2.shape import to_shape
-                if transformer and transformer.location:
-                    point = to_shape(transformer.location)
-                    lat = float(point.y)
-                    lon = float(point.x)
-            except Exception:
-                pass
-
-            ambient_temp = self._fetch_live_weather(lat, lon)
-            
-            # If ambient temp is very high (> 35C), it adds thermal stress to the transformer.
-            # Add up to 15% risk penalty.
-            if ambient_temp > 35.0:
-                heat_stress_penalty = min(15.0, (ambient_temp - 35.0) * 2.0)
-                anomaly_score += heat_stress_penalty
-
-            # Clip final anomaly score to [0.0, 100.0] after weather penalty
-            anomaly_score = min(100.0, max(0.0, anomaly_score))
 
             # Categorize Risk using XGBoost (Supervised Classification)
             if self.xgb_model is not None:
@@ -235,11 +222,11 @@ class RealAIModel:
             
             # Pack SHAP values to fit schemas.intelligence.ShapExplanationResponse
             shap_list = []
+            val_mapping = [temp_c, load_pct, v_lv, curr_a, ambient_temp, age_years, rated_kva]
             for i, name in enumerate(self.features):
-                val_mapping = [temp_c, load_pct, v_lv, curr_a]
                 shap_list.append({
                     "feature_name": name,
-                    "feature_value": round(val_mapping[i], 2),
+                    "feature_value": round(float(val_mapping[i]), 2),
                     "shap_value": round(float(shap_vals[i]), 4)
                 })
 
@@ -277,7 +264,7 @@ class RealAIModel:
         finally:
             db.close()
 
-    def predict_daily_health(self, transformer_id: str, readings: list, calculate_shap: bool = True) -> Dict[str, Any]:
+    def predict_daily_health(self, transformer_id: str, readings: list, calculate_shap: bool = True, age_years: int = None, rated_kva: float = None) -> Dict[str, Any]:
         """
         Performs batch inference over 24 hours of telemetry readings.
         Calculates daily average metrics and runs ML models on daily aggregated values.
@@ -285,6 +272,34 @@ class RealAIModel:
         self.load_models_if_needed()
         if self.model is None or self.survival_model is None or not readings:
             return self._fallback_predict(transformer_id)
+
+        lat = 26.14
+        lon = 91.74
+
+        # Only query database if metadata is not provided
+        if age_years is None or rated_kva is None:
+            db = SessionLocal()
+            try:
+                from models.asset import Transformer
+                t = db.query(Transformer).filter(Transformer.id == transformer_id).first()
+                if t:
+                    age_years = int(t.age_years) if t.age_years is not None else 10
+                    rated_kva = float(t.rated_kva) if t.rated_kva is not None else 500.0
+                    try:
+                        from geoalchemy2.shape import to_shape
+                        if t.location:
+                            point = to_shape(t.location)
+                            lat = float(point.y)
+                            lon = float(point.x)
+                    except Exception:
+                        pass
+                else:
+                    age_years = 10
+                    rated_kva = 500.0
+            finally:
+                db.close()
+
+        ambient_temp = self._fetch_live_weather(lat, lon)
 
         try:
             # Extract features from all readings
@@ -294,7 +309,7 @@ class RealAIModel:
                 load_pct = float(r.load_percentage) if r.load_percentage is not None else 45.0
                 v_lv = float(r.voltage_lv) if r.voltage_lv is not None else 415.0
                 curr_a = float(r.current_a) if r.current_a is not None else 60.0
-                data.append([temp_c, load_pct, v_lv, curr_a])
+                data.append([temp_c, load_pct, v_lv, curr_a, ambient_temp, age_years, rated_kva])
 
             df = pd.DataFrame(data, columns=self.features)
 
@@ -386,9 +401,11 @@ class RealAIModel:
         except Exception as e:
             logger.error(f"Error during daily batch AI inference: {e}")
             return self._fallback_predict(transformer_id)
+        finally:
+            pass
 
 
-    def predict_all_models(self, temp_c: float, load_pct: float, v_lv: float, curr_a: float) -> Dict[str, Any]:
+    def predict_all_models(self, transformer_id: str, temp_c: float, load_pct: float, v_lv: float, curr_a: float) -> Dict[str, Any]:
         """
         Run inference using Isolation Forest, XGBoost, and Random Forest in parallel.
         Returns anomaly scores and risk categories for each.
@@ -396,9 +413,31 @@ class RealAIModel:
         self.load_models_if_needed()
         import pandas as pd
         import numpy as np
+
+        db = SessionLocal()
+        try:
+            from models.asset import Transformer
+            t = db.query(Transformer).filter(Transformer.id == transformer_id).first()
+            age_years = int(t.age_years) if (t and t.age_years is not None) else 10
+            rated_kva = float(t.rated_kva) if (t and t.rated_kva is not None) else 500.0
+            
+            lat = 26.14
+            lon = 91.74
+            if t:
+                try:
+                    from geoalchemy2.shape import to_shape
+                    if t.location:
+                        point = to_shape(t.location)
+                        lat = float(point.y)
+                        lon = float(point.x)
+                except Exception:
+                    pass
+            ambient_temp = self._fetch_live_weather(lat, lon)
+        finally:
+            db.close()
         
         # Feature DataFrame
-        x = np.array([[temp_c, load_pct, v_lv, curr_a]])
+        x = np.array([[temp_c, load_pct, v_lv, curr_a, ambient_temp, age_years, rated_kva]])
         df_x = pd.DataFrame(x, columns=self.features)
         
         results = {}

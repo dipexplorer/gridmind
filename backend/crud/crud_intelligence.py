@@ -98,7 +98,7 @@ def get_transformer_score(db: Session, transformer_id: str):
             curr_a = base_current * (load_pct / 100.0) + local_random.uniform(-5, 5)
         
         from services.ai_service import ai_service
-        preds = ai_service.predict_all_models(temp_c, load_pct, v_lv, curr_a)
+        preds = ai_service.predict_all_models(transformer_id, temp_c, load_pct, v_lv, curr_a)
         
         # Isolation Forest (Prod Final) should always match the actual database values to ensure
         # map and individual detail page consistency.

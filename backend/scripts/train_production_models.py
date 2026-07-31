@@ -30,7 +30,7 @@ def train_production_models():
     df = pd.read_csv(csv_path)
     
     # 1. Train Isolation Forest (Production Anomaly Detection)
-    features = ["temperature_c", "load_percentage", "voltage_lv", "current_a"]
+    features = ["temperature_c", "load_percentage", "voltage_lv", "current_a", "ambient_temperature", "age_years", "rated_kva"]
     X = df[features]
     
     # Fit unsupervised Isolation Forest
