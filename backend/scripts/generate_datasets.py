@@ -26,14 +26,39 @@ def generate_all_datasets():
         os.makedirs(data_dir, exist_ok=True)
         logger.info(f"Ensuring data directory exists at: {data_dir}")
 
+        db_loaded = False
         try:
             transformers = db.query(Transformer).all()
+            if transformers:
+                db_loaded = True
         except Exception as e:
-            logger.warning(f"Database connection failed, skipping dependent datasets: {e}")
+            logger.warning(f"Database connection failed, skipping database query: {e}")
             transformers = []
             
         if not transformers:
-            logger.warning("No transformers found in database. Proceeding with ML dataset generation only.")
+            seed_path = os.path.join(data_dir, "seed_transformers.csv")
+            if os.path.exists(seed_path):
+                logger.info(f"Loading mock transformers from {seed_path} to generate telemetry and trends...")
+                class MockTransformer:
+                    def __init__(self, row):
+                        self.id = row["transformer_id"]
+                        self.transformer_code = row["transformer_code"]
+                        self.rated_kva = float(row["rated_kva"]) if pd.notna(row["rated_kva"]) else 500.0
+                        self.age_years = float(row["age_years"]) if pd.notna(row["age_years"]) else 10.0
+                        self.current_failure_risk = float(row["current_failure_risk"]) if pd.notna(row["current_failure_risk"]) else 0.1
+                        self.current_status = str(row["current_status"]) if pd.notna(row["current_status"]) else "healthy"
+                        self.latitude = float(row["latitude"]) if pd.notna(row["latitude"]) else 26.14
+                        self.longitude = float(row["longitude"]) if pd.notna(row["longitude"]) else 91.74
+                        self.location = None
+                try:
+                    seed_df = pd.read_csv(seed_path)
+                    # Limit mock transformers to top 100 to keep execution fast and prevent API block
+                    mock_subset = seed_df.head(100)
+                    transformers = [MockTransformer(row) for _, row in mock_subset.iterrows()]
+                except Exception as ex:
+                    logger.error(f"Failed to load mock transformers from seed CSV: {ex}")
+            else:
+                logger.warning("No seed_transformers.csv found. Proceeding with ML dataset generation only.")
 
         # ==========================================
         # 1. Generate telemetry_history.csv
@@ -47,14 +72,18 @@ def generate_all_datasets():
             # Coordinates for weather check
             lat = 26.14
             lon = 91.74
-            try:
-                from geoalchemy2.shape import to_shape
-                if t.location:
-                    point = to_shape(t.location)
-                    lat = float(point.y)
-                    lon = float(point.x)
-            except Exception:
-                pass
+            if hasattr(t, "latitude") and hasattr(t, "longitude"):
+                lat = float(t.latitude)
+                lon = float(t.longitude)
+            else:
+                try:
+                    from geoalchemy2.shape import to_shape
+                    if t.location:
+                        point = to_shape(t.location)
+                        lat = float(point.y)
+                        lon = float(point.x)
+                except Exception:
+                    pass
             ambient_temp = ai_service._fetch_live_weather(lat, lon)
 
             # Deterministic status profile based on transformer ID to avoid DB dependency
@@ -250,7 +279,7 @@ def generate_all_datasets():
         # ==========================================
         # 4. Generate seed_transformers.csv (Baseline Database Snapshot)
         # ==========================================
-        if transformers:
+        if transformers and db_loaded:
             logger.info("Generating seed_transformers.csv...")
             seed_rows = []
     
@@ -258,7 +287,6 @@ def generate_all_datasets():
             substations_cache = {s.id: s for s in db.query(Substation).all()}
             feeders_cache = {f.id: f for f in db.query(Feeder).all()}
 
-        if transformers:
             for idx, t in enumerate(transformers):
                 # Extract longitude/latitude from PostGIS Geography
                 lon, lat = 91.74, 26.14
