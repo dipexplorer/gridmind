@@ -182,31 +182,18 @@ def log_transformer_maintenance(id: uuid.UUID, log: MaintenanceLogCreate, db: Se
     return db_log
 
 @router.get("/transformers/{id}/shap-explanations")
-def get_transformer_shap_explanations(id: uuid.UUID, db: Session = Depends(get_db)):
+def get_transformer_shap_explanations(id: uuid.UUID, model: str = "isolation_forest", db: Session = Depends(get_db)):
     """
-    Fetch the SHAP feature contributions for the latest AI run on this transformer.
-    Calculated dynamically based on live attributes to support dropped database tables.
+    Fetch the real SHAP feature contributions calculated dynamically from the ML models.
     """
-    tx = db.query(Transformer).filter(Transformer.id == id).first()
-    if not tx:
+    from services.inference_service import inference_service
+    res = inference_service.score_transformer(str(id), db)
+    if not res:
         raise HTTPException(status_code=404, detail="Transformer not found")
-        
-    temp = float(tx.current_oil_temp_c) if tx.current_oil_temp_c is not None else 45.0
-    load = float(tx.current_load_pct) if tx.current_load_pct is not None else 50.0
-    health = int(tx.current_health_score) if tx.current_health_score is not None else 85
     
-    # If health score is low (< 70), show positive SHAP contributions (red bars pushing risk higher)
-    is_risk = health < 70
-    
-    temp_shap = round(random.uniform(0.15, 0.35) if is_risk else random.uniform(-0.15, 0.05), 4)
-    load_shap = round(random.uniform(0.20, 0.40) if is_risk else random.uniform(-0.20, 0.02), 4)
-    
-    return [
-        {"feature_name": "temperature_c", "feature_value": temp, "shap_value": temp_shap},
-        {"feature_name": "load_percentage", "feature_value": load, "shap_value": load_shap},
-        {"feature_name": "voltage_lv", "feature_value": 412.0 if not is_risk else 370.0, "shap_value": -0.05 if not is_risk else 0.15},
-        {"feature_name": "current_a", "feature_value": 115.0 if not is_risk else 195.0, "shap_value": -0.02 if not is_risk else 0.08}
-    ]
+    if model == "xgboost":
+        return res.get("xgb_shap_values", [])
+    return res.get("shap_values", [])
 
 @router.get("/transformers/{id}/score-history", response_model=List[Dict[str, Any]])
 def get_transformer_score_history(id: uuid.UUID, db: Session = Depends(get_db)):

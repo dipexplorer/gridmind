@@ -122,7 +122,7 @@ export default function Dashboard() {
           substation_name,
           anomaly_score: score,
           risk_category: cat,
-          expected_lifetime_days: cat === "HEALTHY" ? 365 : (cat === "WARNING" ? 90 : 7)
+          expected_lifetime_days: Math.round((1 - (t.current_failure_risk || 0)) * 3650)
         };
       });
 

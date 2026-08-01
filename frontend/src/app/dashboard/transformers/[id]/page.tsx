@@ -198,6 +198,15 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  useEffect(() => {
+    if (!risk) return;
+    if (selectedModel === "xgboost") {
+      setShap(risk.xgb_shap_values || []);
+    } else {
+      setShap(risk.shap_values || []);
+    }
+  }, [risk, selectedModel]);
+
   const handleMaintSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitState("loading");

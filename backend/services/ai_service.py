@@ -309,8 +309,11 @@ class RealAIModel:
             if self.rf_model is not None:
                 rf_pred = int(self.rf_model.predict(df_x.values)[0])
                 rf_category = category_map.get(rf_pred, "HEALTHY")
+                rf_proba = self.rf_model.predict_proba(df_x.values)[0]
+                health_rf = float(np.clip(100.0 * (rf_proba[0] + 0.5 * rf_proba[1]), 0.0, 100.0))
             else:
                 rf_category = "HEALTHY"
+                health_rf = 50.0
 
             # 4. Cox Proportional Hazards RUL & Survival Prob
             try:
@@ -447,7 +450,7 @@ class RealAIModel:
                         "expected_lifetime_days": expected_lifetime_days
                     },
                     "random_forest": {
-                        "anomaly_score": round(anomaly_score, 2),
+                        "anomaly_score": round(100.0 - health_rf, 2),
                         "risk_category": rf_category,
                         "expected_lifetime_days": expected_lifetime_days
                     }
@@ -545,8 +548,11 @@ class RealAIModel:
             if self.rf_model is not None:
                 rf_pred = int(self.rf_model.predict(df_mean.values)[0])
                 rf_category = category_map.get(rf_pred, "HEALTHY")
+                rf_proba = self.rf_model.predict_proba(df_mean.values)[0]
+                health_rf = float(np.clip(100.0 * (rf_proba[0] + 0.5 * rf_proba[1]), 0.0, 100.0))
             else:
                 rf_category = "HEALTHY"
+                health_rf = 50.0
 
             # 4. Predict Remaining Useful Life
             try:
@@ -676,7 +682,7 @@ class RealAIModel:
                         "expected_lifetime_days": expected_lifetime_days
                     },
                     "random_forest": {
-                        "anomaly_score": round(daily_anomaly_score, 2),
+                        "anomaly_score": round(100.0 - health_rf, 2),
                         "risk_category": rf_category,
                         "expected_lifetime_days": expected_lifetime_days
                     }
