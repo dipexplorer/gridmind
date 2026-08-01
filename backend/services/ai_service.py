@@ -344,26 +344,35 @@ class RealAIModel:
             health_physics = float(np.clip(health_physics, 0.0, 100.0))
 
             # 6. Decision Fusion Engine (Model output fusion)
-            w_if = settings.HEALTH_WEIGHT_IF
-            w_xgb = settings.HEALTH_WEIGHT_XGB
-            w_cox = settings.HEALTH_WEIGHT_COX
-            w_phys = settings.HEALTH_WEIGHT_PHYSICS
+            # Architecture: 0.50(Cox) + 0.35(Winner) + 0.15(IF)
+            health_winner = min(health_xgb, health_rf)
             
-            if self.xgb_model is None:
-                w_phys += w_xgb
-                w_xgb = 0.0
+            w_cox = 0.50
+            w_winner = 0.35
+            w_if = 0.15
+            
             if self.survival_model is None:
-                w_phys += w_cox
+                w_winner += w_cox * (w_winner / (w_winner + w_if))
+                w_if += w_cox * (w_if / (w_winner + w_if))
                 w_cox = 0.0
+            if self.xgb_model is None and self.rf_model is None:
+                if self.survival_model is not None:
+                    w_cox += w_winner * (w_cox / (w_cox + w_if))
+                    w_if += w_winner * (w_if / (w_cox + w_if))
+                else:
+                    w_if += w_winner
+                w_winner = 0.0
                 
-            total_w = w_if + w_xgb + w_cox + w_phys
-            w_if, w_xgb, w_cox, w_phys = w_if / total_w, w_xgb / total_w, w_cox / total_w, w_phys / total_w
+            total_w = w_if + w_winner + w_cox
+            if total_w > 0:
+                w_if, w_winner, w_cox = w_if / total_w, w_winner / total_w, w_cox / total_w
+            else:
+                w_if = 1.0
             
             health_score = (
                 w_if * health_if +
-                w_xgb * health_xgb +
-                w_cox * health_cox +
-                w_phys * health_physics
+                w_winner * health_winner +
+                w_cox * health_cox
             )
             health_score = float(np.clip(health_score, 0.0, 100.0))
 
@@ -584,26 +593,35 @@ class RealAIModel:
             health_physics = float(np.clip(health_physics, 0.0, 100.0))
 
             # 6. Decision Fusion Engine (Model output fusion)
-            w_if = settings.HEALTH_WEIGHT_IF
-            w_xgb = settings.HEALTH_WEIGHT_XGB
-            w_cox = settings.HEALTH_WEIGHT_COX
-            w_phys = settings.HEALTH_WEIGHT_PHYSICS
+            # Architecture: 0.50(Cox) + 0.35(Winner) + 0.15(IF)
+            health_winner = min(health_xgb, health_rf)
             
-            if self.xgb_model is None:
-                w_phys += w_xgb
-                w_xgb = 0.0
+            w_cox = 0.50
+            w_winner = 0.35
+            w_if = 0.15
+            
             if self.survival_model is None:
-                w_phys += w_cox
+                w_winner += w_cox * (w_winner / (w_winner + w_if))
+                w_if += w_cox * (w_if / (w_winner + w_if))
                 w_cox = 0.0
+            if self.xgb_model is None and self.rf_model is None:
+                if self.survival_model is not None:
+                    w_cox += w_winner * (w_cox / (w_cox + w_if))
+                    w_if += w_winner * (w_if / (w_cox + w_if))
+                else:
+                    w_if += w_winner
+                w_winner = 0.0
                 
-            total_w = w_if + w_xgb + w_cox + w_phys
-            w_if, w_xgb, w_cox, w_phys = w_if / total_w, w_xgb / total_w, w_cox / total_w, w_phys / total_w
+            total_w = w_if + w_winner + w_cox
+            if total_w > 0:
+                w_if, w_winner, w_cox = w_if / total_w, w_winner / total_w, w_cox / total_w
+            else:
+                w_if = 1.0
             
             health_score = (
                 w_if * health_if +
-                w_xgb * health_xgb +
-                w_cox * health_cox +
-                w_phys * health_physics
+                w_winner * health_winner +
+                w_cox * health_cox
             )
             health_score = float(np.clip(health_score, 0.0, 100.0))
 

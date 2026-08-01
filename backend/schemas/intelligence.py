@@ -27,8 +27,10 @@ class TransformerScoreResponse(TransformerScoreBase):
     run_id: uuid.UUID
     calculated_at: datetime
     model_predictions: Optional[Dict[str, Any]] = None
+    shap_values: Optional[List[Dict[str, Any]]] = None
+    xgb_shap_values: Optional[List[Dict[str, Any]]] = None
     
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
 
 class ShapExplanationBase(BaseModel):
     feature_name: str = Field(..., max_length=64)
