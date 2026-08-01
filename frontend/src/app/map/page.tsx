@@ -51,12 +51,12 @@ export default function NetworkMapPage() {
       const combined: CombinedData[] = transformers.map((t: any) => {
         const substation_name = t.substation_id ? subMap.get(t.substation_id) : 'Unknown';
         const score = (t.current_failure_risk || 0) * 100;
-        const cat = (t.current_status || 'healthy').toUpperCase();
+        const cat = (t.current_status || 'HEALTHY').toUpperCase();
         return { 
           ...t, 
           anomaly_score: score, 
           risk_category: cat, 
-          expected_lifetime_days: Math.round((1 - (t.current_failure_risk || 0)) * 3650), 
+          expected_lifetime_days: t.expected_lifetime_days ?? Math.round((1 - (t.current_failure_risk || 0)) * 3650), 
           substation_name 
         };
       });

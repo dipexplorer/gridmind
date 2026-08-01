@@ -84,6 +84,7 @@ class TransformerBase(BaseModel):
     current_oil_temp_c: Optional[float] = None
     current_health_score: Optional[int] = None
     current_failure_risk: Optional[float] = None
+    expected_lifetime_days: Optional[int] = None
     current_status: Optional[str] = None
     last_updated: Optional[datetime] = None
 

@@ -87,6 +87,7 @@ class Transformer(Base, UUIDMixin, TimestampMixin):
     current_oil_temp_c: Mapped[Optional[float]] = mapped_column()
     current_health_score: Mapped[Optional[int]] = mapped_column()
     current_failure_risk: Mapped[Optional[float]] = mapped_column()
+    expected_lifetime_days: Mapped[Optional[int]] = mapped_column()
     current_status: Mapped[Optional[str]] = mapped_column(String(50))
     last_updated: Mapped[Optional[datetime]] = mapped_column()
 
