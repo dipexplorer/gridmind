@@ -1,8 +1,17 @@
 from datetime import date, datetime
-from sqlalchemy import String, Numeric, Boolean, ForeignKey, Text, ARRAY, Integer
+from sqlalchemy import String, Numeric, Boolean, ForeignKey, Text, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from typing import Optional
+from core.config import settings
+
+if settings.DATABASE_URL.startswith("sqlite"):
+    from sqlalchemy import JSON as SQLiteJSON
+    class ARRAY(SQLiteJSON):
+        def __init__(self, *args, **kwargs):
+            super().__init__()
+else:
+    from sqlalchemy import ARRAY
 
 from .base import Base, UUIDMixin, TimestampMixin
 

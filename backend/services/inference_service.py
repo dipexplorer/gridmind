@@ -63,8 +63,17 @@ class InferenceService:
         from services.data_cache import get_latest_telemetry
         from core.config import settings
 
+        import uuid
+        if isinstance(transformer_id, str):
+            try:
+                transformer_uuid = uuid.UUID(transformer_id)
+            except Exception:
+                transformer_uuid = transformer_id
+        else:
+            transformer_uuid = transformer_id
+
         transformer = db.query(Transformer).filter(
-            Transformer.id == transformer_id
+            Transformer.id == transformer_uuid
         ).first()
 
         if not transformer:
@@ -141,7 +150,7 @@ class InferenceService:
         # ── 3. Build unified response ────────────────────────────────────────
         return {
             # Stable ID keyed to transformer (no random UUID per request)
-            "id": f"score_{transformer_id}",
+            "id": transformer_uuid,
             "transformer_id": transformer_id,
             "run_id": "00000000-0000-0000-0000-000000000000",
 
@@ -176,8 +185,13 @@ class InferenceService:
         Returns a structured response when no telemetry is available.
         Does NOT fabricate sensor readings — returns explicit data_available=False.
         """
+        import uuid
+        try:
+            transformer_uuid = uuid.UUID(transformer_id) if isinstance(transformer_id, str) else transformer_id
+        except Exception:
+            transformer_uuid = transformer.id
         return {
-            "id": f"score_{transformer_id}",
+            "id": transformer_uuid,
             "transformer_id": transformer_id,
             "run_id": "00000000-0000-0000-0000-000000000000",
             "anomaly_score": None,

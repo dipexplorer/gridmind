@@ -33,15 +33,19 @@ from sqlalchemy.orm import sessionmaker
 
 from core.config import settings
 
-# ─── Create the Engine ────────────────────────────────────────────────────────
-# The "engine" is the core SQLAlchemy object that manages the connection pool
+is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+connect_args = {"check_same_thread": False} if is_sqlite else {}
+
 engine = create_engine(
     settings.DATABASE_URL,
-    pool_pre_ping=True,     # Test connection before each use; reconnect if dead
-    pool_recycle=3600,      # Recycle connections every 1 hour (prevents stale connections)
-    pool_size=10,           # Keep 10 connections open in the pool
-    max_overflow=20,        # Allow up to 20 extra connections during spikes
-    echo=settings.API_DEBUG, # Log all SQL statements when DEBUG=true (very useful!)
+    **({} if is_sqlite else {
+        "pool_pre_ping": True,
+        "pool_recycle": 3600,
+        "pool_size": 10,
+        "max_overflow": 20,
+    }),
+    connect_args=connect_args,
+    echo=settings.API_DEBUG,
 )
 
 # ─── Session Factory ──────────────────────────────────────────────────────────

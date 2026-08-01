@@ -38,7 +38,7 @@ backend/ml_models/**/*.joblib
 !backend/ml_models/**/.gitkeep
 
 # SQLite test database
-test_gridmind.db
+*.db
 
 # pytest
 .pytest_cache/

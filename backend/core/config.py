@@ -30,7 +30,11 @@ class Settings(BaseSettings):
 
     @property
     def DATABASE_URL(self) -> str:
-        """Construct the PostgreSQL connection string from individual parts."""
+        """Construct the PostgreSQL connection string from individual parts, or use override."""
+        import os
+        env_url = os.getenv("DATABASE_URL")
+        if env_url:
+            return env_url
         encoded_password = urllib.parse.quote_plus(self.POSTGRES_PASSWORD)
         return (
             f"postgresql://{self.POSTGRES_USER}:{encoded_password}"

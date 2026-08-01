@@ -2,8 +2,24 @@ from datetime import date, datetime
 from sqlalchemy import String, Numeric, Boolean, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
-from geoalchemy2 import Geography
 from typing import Optional
+from core.config import settings
+
+if settings.DATABASE_URL.startswith("sqlite"):
+    from sqlalchemy.types import UserDefinedType
+    class Geography(UserDefinedType):
+        def __init__(self, *args, **kwargs):
+            pass
+        def get_col_spec(self, **kw):
+            return "TEXT"
+        def bind_processor(self, dialect):
+            def process(value):
+                if hasattr(value, "data"):
+                    return str(value.data)
+                return str(value) if value is not None else None
+            return process
+else:
+    from geoalchemy2 import Geography
 
 from .base import Base, UUIDMixin, TimestampMixin
 
