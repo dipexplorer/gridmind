@@ -635,74 +635,30 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
 
               {/* Weather Factor Breakdown */}
               {weather && (
-                <div className={`mt-5 pt-5 border-t border-slate-100 rounded-2xl p-4 ${weather.weather_penalty_percentage > 0 ? "bg-orange-50 border border-orange-100" : "bg-emerald-50 border border-emerald-100"}`}>
-                  <p className={`text-[10px] font-extrabold uppercase tracking-widest mb-3 ${weather.weather_penalty_percentage > 0 ? "text-orange-600" : "text-emerald-600"}`}>
-                    {weather.weather_penalty_percentage > 0 ? "⚠️ Ambient Heat Stress Applied" : "✅ No Weather Penalty Applied"}
-                  </p>
-                  <div className="space-y-2">
-                    {/* Base score row */}
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-blue-400 flex-shrink-0" />
-                        <span className="text-slate-600 font-semibold">Base AI Score</span>
-                        <span className="text-slate-400 text-[10px]">({selectedModel === "ensemble" ? "Consolidated Fusion" : selectedModel === "isolation_forest" ? "Isolation Forest" : selectedModel === "xgboost" ? "XGBoost" : "Random Forest"} model)</span>
-                      </div>
-                      <span className="font-extrabold text-slate-800">
-                        {Math.max(0, (currentRisk.anomaly_score) - weather.weather_penalty_percentage).toFixed(1)}
-                      </span>
-                    </div>
-                    {/* Weather penalty row */}
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${weather.weather_penalty_percentage > 0 ? "bg-orange-400" : "bg-slate-200"}`} />
-                        <span className="text-slate-600 font-semibold">
-                          {weather.is_hot_day ? "☀️" : "☁️"} Weather Penalty
-                        </span>
-                        <span className="text-slate-400 text-[10px]">({weather.ambient_temperature_c.toFixed(1)}°C ambient)</span>
-                      </div>
-                      <span className={`font-extrabold ${weather.weather_penalty_percentage > 0 ? "text-orange-600" : "text-slate-400"}`}>
-                        {weather.weather_penalty_percentage > 0 ? `+${weather.weather_penalty_percentage.toFixed(1)}` : "0.0"}
-                      </span>
-                    </div>
-                    {/* Divider & total */}
-                    <div className="border-t border-slate-200 pt-2 flex items-center justify-between text-xs">
-                      <span className="font-extrabold text-slate-700">= Final Risk Score</span>
-                      <span className="font-black text-base" style={{ color: scoreColor }}>{(currentRisk.anomaly_score).toFixed(1)}</span>
-                    </div>
+                <div className="mt-6 pt-4 border-t border-slate-100">
+                  <div className="flex justify-between items-center text-xs text-slate-500 mb-1.5">
+                    <span>Base AI Score ({selectedModel === "ensemble" ? "Consolidated" : selectedModel.replace(/_/g, " ").toUpperCase()})</span>
+                    <span className="font-semibold text-slate-700">{Math.max(0, (currentRisk.anomaly_score) - weather.weather_penalty_percentage).toFixed(1)}</span>
                   </div>
                   {weather.weather_penalty_percentage > 0 && (
-                    <p className="text-[10px] text-orange-600 mt-2 font-medium">
-                      Outdoor temp {weather.ambient_temperature_c.toFixed(1)}°C exceeds 35°C threshold — thermal stress adds +{weather.weather_penalty_percentage.toFixed(1)}% to failure risk.
-                    </p>
+                    <div className="flex justify-between items-center text-xs text-slate-500 mb-1.5">
+                      <span>Ambient Heat Penalty ({weather.ambient_temperature_c.toFixed(1)}°C)</span>
+                      <span className="font-semibold text-red-500">+{weather.weather_penalty_percentage.toFixed(1)}</span>
+                    </div>
                   )}
+                  <div className="flex justify-between items-center text-sm font-bold mt-2">
+                    <span className="text-slate-800">Final Risk Score</span>
+                    <span style={{ color: scoreColor }}>{(currentRisk.anomaly_score).toFixed(1)}</span>
+                  </div>
                 </div>
               )}
 
-              {/* Validation Warning Callout */}
-              {selectedModel === "ensemble" && (
-                <div className="mt-5 p-3.5 bg-emerald-50/50 border border-emerald-100 rounded-2xl text-[11px] text-emerald-700 flex items-start gap-2.5">
-                  <CheckCircle size={14} className="mt-0.5 text-emerald-500 flex-shrink-0" />
-                  <span>
-                    <strong>Consolidated Fusion Active:</strong> This represents the production ensemble score. It merges the Cox Proportional Hazards timeline model (50%), the XGBoost/RF classification models (35%), and the Isolation Forest anomaly engine (15%) into a single risk profile.
-                  </span>
-                </div>
-              )}
-              {selectedModel === "isolation_forest" && (
-                <div className="mt-5 p-3.5 bg-emerald-50/40 border border-emerald-100 rounded-2xl text-[11px] text-emerald-700 flex items-start gap-2.5">
-                  <CheckCircle size={14} className="mt-0.5 text-emerald-500 flex-shrink-0" />
-                  <span>
-                    <strong>Production Anomaly Mode:</strong> Displaying the primary status predicted by <strong>Isolation Forest</strong>. This model runs automatically in the background every 24 hours to detect outliers.
-                  </span>
-                </div>
-              )}
-              {(selectedModel === "xgboost" || selectedModel === "random_forest") && (
-                <div className="mt-5 p-3.5 bg-blue-50/60 border border-blue-100 rounded-2xl text-[11px] text-blue-700 flex items-start gap-2.5">
-                  <Info size={14} className="mt-0.5 text-blue-500 flex-shrink-0" />
-                  <span>
-                    <strong>Validation Mode Active:</strong> Displaying predictions specifically for the <strong>{selectedModel.replace(/_/g, " ").toUpperCase()}</strong> model. This mode is useful for diagnosing individual model logic.
-                  </span>
-                </div>
-              )}
+              {/* Sub-Model Description */}
+              <div className="mt-4 text-[10px] text-slate-400 italic">
+                {selectedModel === "ensemble" && "Consolidated Fusion: Merges Cox Proportional Hazards (50%), XGBoost/RF (35%), and Isolation Forest (15%)."}
+                {selectedModel === "isolation_forest" && "Isolation Forest: Production Anomaly Mode (Unsupervised)."}
+                {(selectedModel === "xgboost" || selectedModel === "random_forest") && `${selectedModel.replace(/_/g, " ").toUpperCase()}: Validation Mode (Raw classification).`}
+              </div>
             </div>
           </div>
 
