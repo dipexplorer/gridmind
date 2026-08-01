@@ -121,7 +121,7 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
   const [risk, setRisk]             = useState<Risk | null>(null);
   const [weather, setWeather]       = useState<WeatherImpact | null>(null);
   const [activeChart, setActiveChart] = useState<"load" | "temp" | "voltage" | "current">("load");
-  const [selectedModel, setSelectedModel] = useState<"isolation_forest" | "xgboost" | "random_forest">("isolation_forest");
+  const [selectedModel, setSelectedModel] = useState<"ensemble" | "isolation_forest" | "xgboost" | "random_forest">("ensemble");
 
   // Maintenance form
   const [mType, setMType]           = useState("OIL_FILTERATION");
@@ -131,11 +131,11 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
   const [submitState, setSubmitState] = useState<"idle" | "loading" | "success" | "error">("idle");
 
   const currentRisk = React.useMemo(() => {
-    if (risk?.model_predictions && (risk.model_predictions as any)[selectedModel]) {
+    if (selectedModel !== "ensemble" && risk?.model_predictions && (risk.model_predictions as any)[selectedModel]) {
       return (risk.model_predictions as any)[selectedModel];
     }
     return {
-      anomaly_score: risk?.anomaly_score ?? 0,
+      anomaly_score: risk?.health_score !== undefined ? (100.0 - risk.health_score) : (risk?.anomaly_score ?? 0),
       risk_category: risk?.risk_category ?? "UNKNOWN",
       expected_lifetime_days: risk?.expected_lifetime_days ?? 365
     };
@@ -311,7 +311,8 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
             {risk?.model_predictions && (
               <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl border border-slate-200/60 shadow-inner">
                 {[
-                  { id: "isolation_forest", label: "Isolation Forest (Prod Final)" },
+                  { id: "ensemble", label: "Ensemble Fused (Prod)" },
+                  { id: "isolation_forest", label: "Isolation Forest" },
                   { id: "xgboost", label: "XGBoost (Validation)" },
                   { id: "random_forest", label: "Random Forest (Validation)" }
                 ].map(m => (
@@ -587,7 +588,11 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
 
             {/* Risk Gauge Card */}
             <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-7">
-              <SectionTitle icon={FlaskConical} title="Risk Score Breakdown" subtitle="Composite AI-computed risk index" />
+              <SectionTitle 
+                icon={FlaskConical} 
+                title={selectedModel === "ensemble" ? "Risk Score Breakdown" : `${selectedModel === "isolation_forest" ? "Isolation Forest" : selectedModel === "xgboost" ? "XGBoost" : "Random Forest"} Score`} 
+                subtitle={selectedModel === "ensemble" ? "Composite AI-computed risk index" : "Individual model diagnostic score"} 
+              />
               <div className="flex items-center gap-8">
                 {/* Circular gauge */}
                 <div className="relative w-32 h-32 flex-shrink-0">
@@ -639,7 +644,7 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                       <div className="flex items-center gap-2">
                         <span className="w-2.5 h-2.5 rounded-full bg-blue-400 flex-shrink-0" />
                         <span className="text-slate-600 font-semibold">Base AI Score</span>
-                        <span className="text-slate-400 text-[10px]">({selectedModel === "isolation_forest" ? "Isolation Forest" : selectedModel === "xgboost" ? "XGBoost" : "Random Forest"} model)</span>
+                        <span className="text-slate-400 text-[10px]">({selectedModel === "ensemble" ? "Consolidated Fusion" : selectedModel === "isolation_forest" ? "Isolation Forest" : selectedModel === "xgboost" ? "XGBoost" : "Random Forest"} model)</span>
                       </div>
                       <span className="font-extrabold text-slate-800">
                         {Math.max(0, (currentRisk.anomaly_score) - weather.weather_penalty_percentage).toFixed(1)}
@@ -673,18 +678,27 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
               )}
 
               {/* Validation Warning Callout */}
-              {selectedModel !== "isolation_forest" ? (
-                <div className="mt-5 p-3 bg-blue-50/60 border border-blue-100 rounded-2xl text-[11px] text-blue-700 flex items-start gap-2.5">
-                  <Info size={14} className="mt-0.5 text-blue-500 flex-shrink-0" />
-                  <span>
-                    <strong>Validation Mode Active:</strong> Displaying predictions from the supervised {selectedModel === "xgboost" ? "XGBoost" : "Random Forest"} model. The final production-grade status saved in the database is determined by the <strong>Isolation Forest (Prod Final)</strong> engine.
-                  </span>
-                </div>
-              ) : (
-                <div className="mt-5 p-3 bg-emerald-50/40 border border-emerald-100 rounded-2xl text-[11px] text-emerald-700 flex items-start gap-2.5">
+              {selectedModel === "ensemble" && (
+                <div className="mt-5 p-3.5 bg-emerald-50/50 border border-emerald-100 rounded-2xl text-[11px] text-emerald-700 flex items-start gap-2.5">
                   <CheckCircle size={14} className="mt-0.5 text-emerald-500 flex-shrink-0" />
                   <span>
-                    <strong>Production Mode Active:</strong> Displaying the primary status predicted by <strong>Isolation Forest</strong>. This model runs automatically in the background every 24 hours to update the database.
+                    <strong>Consolidated Fusion Active:</strong> This represents the production ensemble score. It merges the Cox Proportional Hazards timeline model (50%), the XGBoost/RF classification models (35%), and the Isolation Forest anomaly engine (15%) into a single risk profile.
+                  </span>
+                </div>
+              )}
+              {selectedModel === "isolation_forest" && (
+                <div className="mt-5 p-3.5 bg-emerald-50/40 border border-emerald-100 rounded-2xl text-[11px] text-emerald-700 flex items-start gap-2.5">
+                  <CheckCircle size={14} className="mt-0.5 text-emerald-500 flex-shrink-0" />
+                  <span>
+                    <strong>Production Anomaly Mode:</strong> Displaying the primary status predicted by <strong>Isolation Forest</strong>. This model runs automatically in the background every 24 hours to detect outliers.
+                  </span>
+                </div>
+              )}
+              {(selectedModel === "xgboost" || selectedModel === "random_forest") && (
+                <div className="mt-5 p-3.5 bg-blue-50/60 border border-blue-100 rounded-2xl text-[11px] text-blue-700 flex items-start gap-2.5">
+                  <Info size={14} className="mt-0.5 text-blue-500 flex-shrink-0" />
+                  <span>
+                    <strong>Validation Mode Active:</strong> Displaying predictions specifically for the <strong>{selectedModel.replace(/_/g, " ").toUpperCase()}</strong> model. This mode is useful for diagnosing individual model logic.
                   </span>
                 </div>
               )}

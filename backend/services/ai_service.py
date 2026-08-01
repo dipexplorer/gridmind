@@ -459,7 +459,7 @@ class RealAIModel:
                 "model_predictions": {
                     "isolation_forest": {
                         "anomaly_score": round(anomaly_score, 2),
-                        "risk_category": risk_category,
+                        "risk_category": "CRITICAL" if anomaly_score >= 90.0 else ("WARNING" if anomaly_score >= 70.0 else "HEALTHY"),
                         "expected_lifetime_days": expected_lifetime_days
                     },
                     "xgboost": {
@@ -714,7 +714,7 @@ class RealAIModel:
                 "model_predictions": {
                     "isolation_forest": {
                         "anomaly_score": round(daily_anomaly_score, 2),
-                        "risk_category": risk_category,
+                        "risk_category": "CRITICAL" if daily_anomaly_score >= 90.0 else ("WARNING" if daily_anomaly_score >= 70.0 else "HEALTHY"),
                         "expected_lifetime_days": expected_lifetime_days
                     },
                     "xgboost": {
