@@ -318,7 +318,12 @@ class RealAIModel:
             # 4. Cox Proportional Hazards RUL & Survival Prob
             try:
                 median_life = self.survival_model.predict_median(df_x)
-                expected_lifetime_days = float(median_life.iloc[0])
+                if hasattr(median_life, 'iloc'):
+                    expected_lifetime_days = float(median_life.iloc[0])
+                elif hasattr(median_life, 'item'):
+                    expected_lifetime_days = float(median_life.item())
+                else:
+                    expected_lifetime_days = float(median_life)
                 if np.isinf(expected_lifetime_days) or np.isnan(expected_lifetime_days):
                     expected_lifetime_days = int((100 - anomaly_score) * 36.5)
                 else:
@@ -571,7 +576,12 @@ class RealAIModel:
             # 4. Predict Remaining Useful Life
             try:
                 median_life = self.survival_model.predict_median(df_mean)
-                expected_lifetime_days = float(median_life.iloc[0])
+                if hasattr(median_life, 'iloc'):
+                    expected_lifetime_days = float(median_life.iloc[0])
+                elif hasattr(median_life, 'item'):
+                    expected_lifetime_days = float(median_life.item())
+                else:
+                    expected_lifetime_days = float(median_life)
                 if np.isinf(expected_lifetime_days) or np.isnan(expected_lifetime_days):
                     expected_lifetime_days = int((100 - daily_anomaly_score) * 36.5)
                 else:
