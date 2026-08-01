@@ -633,32 +633,17 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                 </div>
               </div>
 
-              {/* Weather Factor Breakdown */}
-              {weather && (
-                <div className="mt-6 pt-4 border-t border-slate-100">
-                  <div className="flex justify-between items-center text-xs text-slate-500 mb-1.5">
-                    <span>Base AI Score ({selectedModel === "ensemble" ? "Consolidated" : selectedModel.replace(/_/g, " ").toUpperCase()})</span>
-                    <span className="font-semibold text-slate-700">{Math.max(0, (currentRisk.anomaly_score) - weather.weather_penalty_percentage).toFixed(1)}</span>
-                  </div>
-                  {weather.weather_penalty_percentage > 0 && (
-                    <div className="flex justify-between items-center text-xs text-slate-500 mb-1.5">
-                      <span>Ambient Heat Penalty ({weather.ambient_temperature_c.toFixed(1)}°C)</span>
-                      <span className="font-semibold text-red-500">+{weather.weather_penalty_percentage.toFixed(1)}</span>
+              {/* Weather Penalty Warning */}
+              {weather && weather.weather_penalty_percentage > 0 && (
+                <div className="mt-5 pt-4 border-t border-slate-100">
+                  <div className="flex items-start gap-2 bg-orange-50 border border-orange-100 p-3 rounded-xl text-xs text-orange-800">
+                    <span className="text-sm">⚠️</span>
+                    <div>
+                      <strong>Ambient Heat Stress Penalty Applied:</strong> The outdoor temperature is {weather.ambient_temperature_c.toFixed(1)}°C, which exceeds normal operating conditions. This adds a +{weather.weather_penalty_percentage.toFixed(1)}% thermal stress penalty to the base AI score.
                     </div>
-                  )}
-                  <div className="flex justify-between items-center text-sm font-bold mt-2">
-                    <span className="text-slate-800">Final Risk Score</span>
-                    <span style={{ color: scoreColor }}>{(currentRisk.anomaly_score).toFixed(1)}</span>
                   </div>
                 </div>
               )}
-
-              {/* Sub-Model Description */}
-              <div className="mt-4 text-[10px] text-slate-400 italic">
-                {selectedModel === "ensemble" && "Consolidated Fusion: Merges Cox Proportional Hazards (50%), XGBoost/RF (35%), and Isolation Forest (15%)."}
-                {selectedModel === "isolation_forest" && "Isolation Forest: Production Anomaly Mode (Unsupervised)."}
-                {(selectedModel === "xgboost" || selectedModel === "random_forest") && `${selectedModel.replace(/_/g, " ").toUpperCase()}: Validation Mode (Raw classification).`}
-              </div>
             </div>
           </div>
 
