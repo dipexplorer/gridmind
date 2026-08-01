@@ -545,12 +545,12 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                 </div>
               ) : (
                 <>
-                  <ResponsiveContainer width="100%" height={200}>
+                  <ResponsiveContainer width="100%" height={400}>
                     <BarChart data={formattedShap} layout="vertical" margin={{ top: 0, right: 25, left: 10, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#F8FAFC" horizontal={false} />
                       <XAxis type="number" stroke="#CBD5E1" fontSize={10} tickLine={false} axisLine={false}
                         tickFormatter={v => `${v > 0 ? "+" : ""}${v.toFixed(2)}`} />
-                      <YAxis type="category" dataKey="feature" stroke="#94A3B8" fontSize={11} width={140} tickLine={false} axisLine={false} />
+                      <YAxis type="category" dataKey="feature" stroke="#94A3B8" fontSize={11} width={140} tickLine={false} axisLine={false} interval={0} />
                       <Tooltip
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null;
@@ -579,7 +579,7 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                   <div className="flex items-center gap-5 mt-4 pt-4 border-t border-slate-50 text-xs font-semibold">
                     <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-red-500 flex-shrink-0" /> Increases risk</div>
                     <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-emerald-500 flex-shrink-0" /> Reduces risk</div>
-                    <div className="ml-auto text-slate-400 text-[10px] italic">SHAP values from IsolationForest model</div>
+                    <div className="ml-auto text-slate-400 text-[10px] italic">SHAP values from {selectedModel === "xgboost" ? "XGBoost" : selectedModel === "random_forest" ? "Random Forest" : "Isolation Forest"} model</div>
                   </div>
                 </>
               )}

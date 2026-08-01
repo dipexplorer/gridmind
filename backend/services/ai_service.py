@@ -407,7 +407,8 @@ class RealAIModel:
                 shap_list.append({
                     "feature_name": name,
                     "feature_value": round(float(val_mapping[i]), 2),
-                    "shap_value": round(float(shap_vals[i]), 4)
+                    # Invert Isolation Forest SHAP values to align with the legend (positive = increases risk)
+                    "shap_value": round(-float(shap_vals[i]), 4)
                 })
 
             # 9. Compute Supervised SHAP explainability (using XGBoost/RF fallback)
@@ -432,11 +433,14 @@ class RealAIModel:
                         else:
                             supervised_shap_class = supervised_shap_vals[0]
 
+                    # Invert sign if predicted class is HEALTHY (0) so positive always means "increases risk"
+                    sign_multiplier = -1.0 if pred_class_idx == 0 else 1.0
+
                     for i, name in enumerate(self.features):
                         xgb_shap_list.append({
                             "feature_name": name,
                             "feature_value": round(float(val_mapping[i]), 2),
-                            "shap_value": round(float(supervised_shap_class[i]), 4)
+                            "shap_value": round(sign_multiplier * float(supervised_shap_class[i]), 4)
                         })
                 except Exception as shap_err:
                     logger.warning(f"Supervised SHAP values computation failed: {shap_err}")
@@ -657,7 +661,8 @@ class RealAIModel:
                     shap_list.append({
                         "feature_name": name,
                         "feature_value": round(float(mean_features[name]), 2),
-                        "shap_value": round(float(shap_vals[i]), 4)
+                        # Invert Isolation Forest SHAP values to align with the legend (positive = increases risk)
+                        "shap_value": round(-float(shap_vals[i]), 4)
                     })
 
             xgb_shap_list = []
@@ -681,11 +686,14 @@ class RealAIModel:
                         else:
                             supervised_shap_class = supervised_shap_vals[0]
 
+                    # Invert sign if predicted class is HEALTHY (0) so positive always means "increases risk"
+                    sign_multiplier = -1.0 if pred_class_idx == 0 else 1.0
+
                     for i, name in enumerate(self.features):
                         xgb_shap_list.append({
                             "feature_name": name,
                             "feature_value": round(float(mean_features[name]), 2),
-                            "shap_value": round(float(supervised_shap_class[i]), 4)
+                            "shap_value": round(sign_multiplier * float(supervised_shap_class[i]), 4)
                         })
                 except Exception as shap_err:
                     logger.warning(f"Supervised SHAP daily values computation failed: {shap_err}")
