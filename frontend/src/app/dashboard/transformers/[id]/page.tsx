@@ -27,7 +27,15 @@ interface DetailData {
 interface TSPoint { time: string; load_percentage: number; voltage_lv: number; current_a: number; temperature_c: number; }
 interface MLog { id: string; maintenance_date: string; maintenance_type: string; work_description?: string; findings?: string; oil_bdv_kv?: number; outcome: string; }
 interface ShapRow { feature_name: string; feature_value: number; shap_value: number; }
-interface Risk { anomaly_score: number; risk_category: string; expected_lifetime_days: number; model_predictions?: any; }
+interface Risk {
+  anomaly_score: number;
+  health_score?: number;
+  risk_category: string;
+  expected_lifetime_days: number;
+  model_predictions?: any;
+  shap_values?: ShapRow[];
+  xgb_shap_values?: ShapRow[];
+}
 interface WeatherImpact { ambient_temperature_c: number; weather_penalty_percentage: number; is_hot_day: boolean; }
 
 const RISK_META: Record<string, { color: string; bg: string; border: string; glow: string; label: string }> = {
@@ -38,10 +46,19 @@ const RISK_META: Record<string, { color: string; bg: string; border: string; glo
 };
 
 const featureLabel: Record<string, string> = {
-  temperature_c: "Oil Temperature (°C)",
-  load_percentage: "Load Factor (%)",
-  voltage_lv: "LV Voltage (V)",
-  current_a: "Current (A)",
+  temp_c: "Oil Temperature",
+  load_pct: "Load Factor",
+  v_lv: "LV Secondary Voltage",
+  curr_a: "Load Current",
+  ambient_temp: "Ambient Outdoor Temp",
+  age_years: "Asset Operational Age",
+  rated_kva: "Rated Capacity (kVA)",
+  power_factor: "Power Factor (PF)",
+  load_ratio: "Load to Capacity Ratio",
+  current_ratio: "Current Load Ratio",
+  voltage_deviation: "Voltage Deviation",
+  temperature_rise: "Thermal Winding Rise",
+  stress_index: "Combined Thermal Stress"
 };
 
 // ── Custom Tooltip ─────────────────────────────────────────────────────────────
@@ -121,7 +138,7 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
   const [risk, setRisk]             = useState<Risk | null>(null);
   const [weather, setWeather]       = useState<WeatherImpact | null>(null);
   const [activeChart, setActiveChart] = useState<"load" | "temp" | "voltage" | "current">("load");
-  const [selectedModel, setSelectedModel] = useState<"isolation_forest" | "xgboost" | "random_forest">("isolation_forest");
+  const [selectedModel, setSelectedModel] = useState<"fused" | "isolation_forest" | "xgboost" | "random_forest" | "cox">("fused");
 
   // Maintenance form
   const [mType, setMType]           = useState("OIL_FILTERATION");
@@ -131,6 +148,13 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
   const [submitState, setSubmitState] = useState<"idle" | "loading" | "success" | "error">("idle");
 
   const currentRisk = React.useMemo(() => {
+    if (selectedModel === "fused") {
+      return {
+        anomaly_score: risk ? (100.0 - (risk.health_score ?? 100.0)) : 0.0,
+        risk_category: risk?.risk_category ?? "UNKNOWN",
+        expected_lifetime_days: risk?.expected_lifetime_days ?? 365
+      };
+    }
     if (risk?.model_predictions && (risk.model_predictions as any)[selectedModel]) {
       return (risk.model_predictions as any)[selectedModel];
     }
@@ -269,12 +293,22 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
     t: new Date(pt.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
   }));
 
-  const formattedShap = shap.map(s => ({
-    feature: featureLabel[s.feature_name] ?? s.feature_name.replace(/_/g, " ").toUpperCase(),
-    impact:  s.shap_value,
-    value:   s.feature_value,
-    absImpact: Math.abs(s.shap_value),
-  })).sort((a, b) => b.absImpact - a.absImpact);
+  const formattedShap = shap.map(s => {
+    // For Isolation Forest/Fused, lower decision function score = higher anomaly.
+    // Invert the SHAP value and scale by 100.
+    // For XGBoost/RF, positive SHAP increases the class probability (increases risk).
+    const rawImpact = (selectedModel === "isolation_forest" || selectedModel === "fused")
+      ? -100.0 * s.shap_value
+      : 100.0 * s.shap_value;
+
+    return {
+      feature: featureLabel[s.feature_name] ?? s.feature_name.replace(/_/g, " ").toUpperCase(),
+      rawFeatureName: s.feature_name,
+      impact:  rawImpact,
+      value:   s.feature_value,
+      absImpact: Math.abs(rawImpact),
+    };
+  }).sort((a, b) => b.absImpact - a.absImpact);
 
   // Chart selector config
   const chartConfig: Record<typeof activeChart, { key: string; color: string; label: string; unit: string }> = {
@@ -311,14 +345,16 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
             {risk?.model_predictions && (
               <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl border border-slate-200/60 shadow-inner">
                 {[
-                  { id: "isolation_forest", label: "Isolation Forest (Prod Final)" },
-                  { id: "xgboost", label: "XGBoost (Validation)" },
-                  { id: "random_forest", label: "Random Forest (Validation)" }
+                  { id: "fused", label: "Consolidated Fusion (Prod)" },
+                  { id: "isolation_forest", label: "Isolation Forest (15%)" },
+                  { id: "xgboost", label: "XGBoost (35%)" },
+                  { id: "random_forest", label: "Random Forest" },
+                  { id: "cox", label: "Cox Survival (50%)" }
                 ].map(m => (
                   <button
                     key={m.id}
                     onClick={() => setSelectedModel(m.id as any)}
-                    className={`px-3 py-1 rounded-lg text-[10px] font-extrabold tracking-wide transition-all ${
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-extrabold tracking-wide transition-all ${
                       selectedModel === m.id
                         ? "bg-white text-slate-800 shadow-sm border border-slate-200/10"
                         : "text-slate-500 hover:text-slate-800"
@@ -530,10 +566,10 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
               <SectionTitle icon={BrainCircuit} title="AI Explainability (SHAP)" subtitle="Why did the AI assign this risk score?" />
 
               {/* Explanation note */}
-              <div className="flex items-start gap-3 bg-blue-50 border border-blue-100 rounded-2xl p-4 mb-5 text-xs text-blue-700">
+              <div className="flex items-start gap-3 bg-blue-50/50 border border-blue-100 rounded-2xl p-4 mb-6 text-xs text-blue-700">
                 <Info size={15} className="flex-shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-bold">How to read:</span> <span className="font-medium">Positive (red) bars</span> mean the feature is <em>pushing the risk score higher</em>. <span className="font-medium">Negative (green) bars</span> mean it's keeping the transformer healthier. Longer bar = stronger influence.
+                  <span className="font-bold">How to read:</span> <span className="font-medium">Positive values (right/red)</span> indicate the feature is <em>driving the risk score higher</em>. <span className="font-medium">Negative values (left/green)</span> indicate it's keeping the transformer healthier. The bar length represents the relative strength of that influence.
                 </div>
               </div>
 
@@ -544,72 +580,163 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                   <p className="text-xs mt-1">Run an AI scan to generate explanations</p>
                 </div>
               ) : (
-                <>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart data={formattedShap} layout="vertical" margin={{ top: 0, right: 25, left: 10, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#F8FAFC" horizontal={false} />
-                      <XAxis type="number" stroke="#CBD5E1" fontSize={10} tickLine={false} axisLine={false}
-                        tickFormatter={v => `${v > 0 ? "+" : ""}${v.toFixed(2)}`} />
-                      <YAxis type="category" dataKey="feature" stroke="#94A3B8" fontSize={11} width={140} tickLine={false} axisLine={false} />
-                      <Tooltip
-                        content={({ active, payload }) => {
-                          if (!active || !payload?.length) return null;
-                          const d = payload[0].payload;
-                          return (
-                            <div className="bg-white border border-slate-200 rounded-2xl p-3 shadow-xl text-xs">
-                              <p className="font-extrabold text-slate-800 mb-1">{d.feature}</p>
-                              <p className="text-slate-500">Sensor value: <span className="font-bold text-slate-800">{d.value?.toFixed?.(2) ?? d.value}</span></p>
-                              <p className={`font-bold mt-1 ${d.impact > 0 ? "text-red-600" : "text-emerald-600"}`}>
-                                Risk contribution: {d.impact > 0 ? "+" : ""}{d.impact.toFixed(4)}
-                              </p>
-                            </div>
-                          );
-                        }}
-                      />
-                      <ReferenceLine x={0} stroke="#CBD5E1" strokeWidth={1.5} />
-                      <Bar dataKey="impact" radius={[0, 6, 6, 0]} maxBarSize={28}>
-                        {formattedShap.map((entry, i) => (
-                          <Cell key={i} fill={entry.impact > 0 ? "#EF4444" : "#10B981"} fillOpacity={0.85} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+                <div className="space-y-4">
+                  {/* Top 6 key factors */}
+                  {formattedShap.slice(0, 6).map((item) => {
+                    const maxVal = Math.max(...formattedShap.map(x => x.absImpact)) || 1.0;
+                    const percentWidth = Math.min(100, (item.absImpact / maxVal) * 100);
+                    const isPositive = item.impact > 0;
 
-                  {/* SHAP Legend */}
-                  <div className="flex items-center gap-5 mt-4 pt-4 border-t border-slate-50 text-xs font-semibold">
-                    <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-red-500 flex-shrink-0" /> Increases risk</div>
-                    <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-emerald-500 flex-shrink-0" /> Reduces risk</div>
-                    <div className="ml-auto text-slate-400 text-[10px] italic">SHAP values from IsolationForest model</div>
-                  </div>
-                </>
+                    // Feature value formatter helper inside map function
+                    const getFeatureValueWithUnit = (key: string, val: number) => {
+                      if (key === "temp_c" || key === "ambient_temp" || key === "temperature_rise") return `${val.toFixed(1)} °C`;
+                      if (key === "load_pct" || key === "load_ratio" || key === "current_ratio") return `${val.toFixed(1)}%`;
+                      if (key === "v_lv") return `${val.toFixed(0)} V`;
+                      if (key === "curr_a") return `${val.toFixed(1)} A`;
+                      if (key === "age_years") return `${val.toFixed(0)} yrs`;
+                      if (key === "rated_kva") return `${val.toFixed(0)} kVA`;
+                      return val.toFixed(2);
+                    };
+
+                    return (
+                      <div key={item.feature} className="group flex flex-col md:flex-row md:items-center justify-between gap-3 p-3 rounded-2xl border border-slate-100 hover:border-slate-200/80 hover:bg-slate-50/50 transition-all">
+                        {/* Feature Name & Value */}
+                        <div className="flex items-center gap-2.5 min-w-[220px]">
+                          <div className={`p-2 rounded-xl flex-shrink-0 ${isPositive ? "bg-red-50 text-red-500" : "bg-emerald-50 text-emerald-500"}`}>
+                            {item.rawFeatureName.includes("temp") ? <Thermometer size={14} /> :
+                             item.rawFeatureName.includes("load") ? <Gauge size={14} /> :
+                             item.rawFeatureName.includes("voltage") || item.rawFeatureName.includes("v_lv") ? <Cpu size={14} /> :
+                             item.rawFeatureName.includes("current") || item.rawFeatureName.includes("curr_a") ? <Zap size={14} /> :
+                             <Info size={14} />}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-slate-800">{item.feature}</span>
+                            <span className="text-[10px] font-semibold text-slate-400">Value: {getFeatureValueWithUnit(item.rawFeatureName, item.value)}</span>
+                          </div>
+                        </div>
+
+                        {/* Centered Diverging Bar */}
+                        <div className="flex-1 flex items-center justify-center relative min-w-[120px] px-2">
+                          {/* Left half (Negative impact - green) */}
+                          <div className="w-1/2 flex justify-end pr-0.5 border-r border-slate-200">
+                            {!isPositive && (
+                              <div
+                                className="h-2 rounded-l-full bg-gradient-to-l from-emerald-500 to-emerald-300"
+                                style={{ width: `${percentWidth}%` }}
+                              />
+                            )}
+                          </div>
+                          {/* Right half (Positive impact - red) */}
+                          <div className="w-1/2 flex justify-start pl-0.5">
+                            {isPositive && (
+                              <div
+                                className="h-2 rounded-r-full bg-gradient-to-r from-red-400 to-red-600"
+                                style={{ width: `${percentWidth}%` }}
+                              />
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                    {/* SHAP Legend */}
+                    <div className="flex items-center gap-5 mt-4 pt-4 border-t border-slate-100 text-xs font-semibold text-slate-500">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-red-500" /> Increases Risk
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Reduces Risk
+                      </div>
+                      <div className="ml-auto text-[10px] text-slate-400 italic">
+                        SHAP values dynamically extracted from {selectedModel === "fused" ? "Isolation Forest" : selectedModel.replace(/_/g, " ")} Model
+                      </div>
+                    </div>
+                </div>
               )}
             </div>
 
             {/* Risk Gauge Card */}
             <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-7">
               <SectionTitle icon={FlaskConical} title="Risk Score Breakdown" subtitle="Composite AI-computed risk index" />
-              <div className="flex items-center gap-8">
+
+              {/* Show the Decision Fusion Breakdown when in Consolidated/Fused mode */}
+              {selectedModel === "fused" && risk?.model_predictions ? (
+                <div className="space-y-6">
+                  {/* Top: Flow Diagram Pipeline */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Cox PH Card */}
+                    <div className="relative p-4 rounded-2xl bg-gradient-to-br from-slate-50 to-indigo-50/20 border border-slate-200/60 shadow-sm hover:shadow transition-all">
+                      <div className="absolute top-3 right-3 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-indigo-50 text-indigo-600 border border-indigo-100">
+                        Weight: 50%
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider mb-1">Cox Survival Model</p>
+                      <h4 className="text-xl font-black text-indigo-700 leading-none">
+                        {(risk.model_predictions.cox?.anomaly_score ?? 0).toFixed(0)}%
+                      </h4>
+                      <p className="text-[10px] font-semibold text-slate-400 mt-2">Contrib: <span className="text-indigo-600 font-black">+{( (risk.model_predictions.cox?.anomaly_score ?? 0) * 0.50 ).toFixed(1)}%</span></p>
+                      <p className="text-[9px] text-slate-400 mt-1 truncate">Time-to-failure reliability index</p>
+                    </div>
+
+                    {/* XGBoost/RF Card */}
+                    <div className="relative p-4 rounded-2xl bg-gradient-to-br from-slate-50 to-purple-50/20 border border-slate-200/60 shadow-sm hover:shadow transition-all">
+                      <div className="absolute top-3 right-3 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-purple-50 text-purple-600 border border-purple-100">
+                        Weight: 35%
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider mb-1">Supervised Classifier</p>
+                      <h4 className="text-xl font-black text-purple-700 leading-none">
+                        {Math.max(risk.model_predictions.xgboost?.anomaly_score ?? 0, risk.model_predictions.random_forest?.anomaly_score ?? 0).toFixed(0)}%
+                      </h4>
+                      <p className="text-[10px] font-semibold text-slate-400 mt-2">Contrib: <span className="text-purple-600 font-black">+{( Math.max(risk.model_predictions.xgboost?.anomaly_score ?? 0, risk.model_predictions.random_forest?.anomaly_score ?? 0) * 0.35 ).toFixed(1)}%</span></p>
+                      <p className="text-[9px] text-slate-400 mt-1 truncate">Worst of XGB ({risk.model_predictions.xgboost?.anomaly_score ?? 0}%) vs RF ({risk.model_predictions.random_forest?.anomaly_score ?? 0}%)</p>
+                    </div>
+
+                    {/* Isolation Forest Card */}
+                    <div className="relative p-4 rounded-2xl bg-gradient-to-br from-slate-50 to-cyan-50/20 border border-slate-200/60 shadow-sm hover:shadow transition-all">
+                      <div className="absolute top-3 right-3 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-cyan-50 text-cyan-600 border border-cyan-100">
+                        Weight: 15%
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider mb-1">Isolation Forest Anomaly</p>
+                      <h4 className="text-xl font-black text-cyan-700 leading-none">
+                        {(risk.model_predictions.isolation_forest?.anomaly_score ?? 0).toFixed(0)}%
+                      </h4>
+                      <p className="text-[10px] font-semibold text-slate-400 mt-2">Contrib: <span className="text-cyan-600 font-black">+{( (risk.model_predictions.isolation_forest?.anomaly_score ?? 0) * 0.15 ).toFixed(1)}%</span></p>
+                      <p className="text-[9px] text-slate-400 mt-1 truncate">Telemetry outlier detection</p>
+                    </div>
+                  </div>
+
+                  {/* Flow Connection Arrow */}
+                  <div className="flex justify-center items-center -my-2">
+                    <div className="w-px h-6 bg-slate-200 border-dashed" />
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Central Consolidated Score Display */}
+              <div className="flex items-center gap-8 mt-4 bg-slate-50/50 p-5 rounded-3xl border border-slate-100 shadow-inner">
                 {/* Circular gauge */}
                 <div className="relative w-32 h-32 flex-shrink-0">
                   <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90">
-                    <circle cx="60" cy="60" r="50" fill="none" stroke="#F1F5F9" strokeWidth="12" />
-                    {/* Total score arc */}
+                    <circle cx="60" cy="60" r="50" fill="none" stroke="#E2E8F0" strokeWidth="12" />
+                    {/* Base score arc */}
                     <circle cx="60" cy="60" r="50" fill="none" stroke={scoreColor} strokeWidth="12"
                       strokeDasharray={`${2 * Math.PI * 50 * (currentRisk.anomaly_score) / 100} ${2 * Math.PI * 50}`}
                       strokeLinecap="round" className="transition-all duration-1000 ease-out" />
                       
-                    {/* Base score arc */}
+                    {/* Weather penalty arc (overlayed on top) */}
                     {weather && weather.weather_penalty_percentage > 0 && (
-                      <circle cx="60" cy="60" r="50" fill="none" stroke="#60A5FA" strokeWidth="12"
-                        strokeDasharray={`${2 * Math.PI * 50 * Math.max(0, (currentRisk.anomaly_score) - weather.weather_penalty_percentage) / 100} ${2 * Math.PI * 50}`}
+                      <circle cx="60" cy="60" r="50" fill="none" stroke="#F97316" strokeWidth="12"
+                        strokeDasharray={`${2 * Math.PI * 50 * (weather.weather_penalty_percentage) / 100} ${2 * Math.PI * 50}`}
+                        strokeDashoffset={`-${2 * Math.PI * 50 * (currentRisk.anomaly_score - weather.weather_penalty_percentage) / 100}`}
                         strokeLinecap="round" className="transition-all duration-1000 ease-out" />
                     )}
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center rotate-0">
-                    <span className="text-2xl font-black" style={{ color: scoreColor }}>{(currentRisk.anomaly_score).toFixed(0)}</span>
-                    <span className="text-[10px] font-bold text-slate-400">/ 100</span>
+                    <span className="text-3xl font-black text-slate-800">{(currentRisk.anomaly_score).toFixed(0)}</span>
+                    <span className="text-[10px] font-bold text-slate-400">RISK INDEX</span>
                   </div>
                 </div>
+
                 {/* Tier explanations */}
                 <div className="flex-1 space-y-2.5">
                   {[
@@ -617,7 +744,7 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                     { tier: "WARNING",  range: "70–89",  color: "bg-amber-400",  active: (currentRisk.anomaly_score) >= 70 && (currentRisk.anomaly_score) < 90 },
                     { tier: "HEALTHY",  range: "0–69",   color: "bg-emerald-500",active: (currentRisk.anomaly_score) < 70 },
                   ].map(r => (
-                    <div key={r.tier} className={`flex items-center gap-3 py-2 px-3 rounded-xl transition-all ${r.active ? "bg-slate-50 ring-1 ring-slate-200" : "opacity-40"}`}>
+                    <div key={r.tier} className={`flex items-center gap-3 py-2 px-3 rounded-xl transition-all ${r.active ? "bg-white shadow-sm ring-1 ring-slate-200" : "opacity-40"}`}>
                       <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${r.color}`} />
                       <span className="text-xs font-extrabold text-slate-700">{r.tier}</span>
                       <span className="text-xs text-slate-400 ml-auto">{r.range}</span>
@@ -638,11 +765,11 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
                         <span className="w-2.5 h-2.5 rounded-full bg-blue-400 flex-shrink-0" />
-                        <span className="text-slate-600 font-semibold">Base AI Score</span>
-                        <span className="text-slate-400 text-[10px]">({selectedModel === "isolation_forest" ? "Isolation Forest" : selectedModel === "xgboost" ? "XGBoost" : "Random Forest"} model)</span>
+                        <span className="text-slate-600 font-semibold">Base AI Fused Score</span>
+                        <span className="text-slate-400 text-[10px]">(COX 50% + Classifier 35% + IF 15%)</span>
                       </div>
                       <span className="font-extrabold text-slate-800">
-                        {Math.max(0, (currentRisk.anomaly_score) - weather.weather_penalty_percentage).toFixed(1)}
+                        {Math.max(0, (currentRisk.anomaly_score) - weather.weather_penalty_percentage).toFixed(1)}%
                       </span>
                     </div>
                     {/* Weather penalty row */}
@@ -655,13 +782,13 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                         <span className="text-slate-400 text-[10px]">({weather.ambient_temperature_c.toFixed(1)}°C ambient)</span>
                       </div>
                       <span className={`font-extrabold ${weather.weather_penalty_percentage > 0 ? "text-orange-600" : "text-slate-400"}`}>
-                        {weather.weather_penalty_percentage > 0 ? `+${weather.weather_penalty_percentage.toFixed(1)}` : "0.0"}
+                        {weather.weather_penalty_percentage > 0 ? `+${weather.weather_penalty_percentage.toFixed(1)}%` : "0.0%"}
                       </span>
                     </div>
                     {/* Divider & total */}
                     <div className="border-t border-slate-200 pt-2 flex items-center justify-between text-xs">
-                      <span className="font-extrabold text-slate-700">= Final Risk Score</span>
-                      <span className="font-black text-base" style={{ color: scoreColor }}>{(currentRisk.anomaly_score).toFixed(1)}</span>
+                      <span className="font-extrabold text-slate-700">Consolidated Risk Score</span>
+                      <span className="font-black text-base" style={{ color: scoreColor }}>{(currentRisk.anomaly_score).toFixed(1)}%</span>
                     </div>
                   </div>
                   {weather.weather_penalty_percentage > 0 && (
@@ -672,19 +799,19 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                 </div>
               )}
 
-              {/* Validation Warning Callout */}
-              {selectedModel !== "isolation_forest" ? (
-                <div className="mt-5 p-3 bg-blue-50/60 border border-blue-100 rounded-2xl text-[11px] text-blue-700 flex items-start gap-2.5">
-                  <Info size={14} className="mt-0.5 text-blue-500 flex-shrink-0" />
+              {/* Mode Callout */}
+              {selectedModel === "fused" ? (
+                <div className="mt-5 p-3.5 bg-emerald-50/50 border border-emerald-100 rounded-2xl text-[11px] text-emerald-700 flex items-start gap-2.5">
+                  <CheckCircle size={14} className="mt-0.5 text-emerald-500 flex-shrink-0" />
                   <span>
-                    <strong>Validation Mode Active:</strong> Displaying predictions from the supervised {selectedModel === "xgboost" ? "XGBoost" : "Random Forest"} model. The final production-grade status saved in the database is determined by the <strong>Isolation Forest (Prod Final)</strong> engine.
+                    <strong>Consolidated Fusion Active:</strong> This represents the production ensemble score. It merges the Cox Proportional Hazards timeline model (50%), the XGBoost/RF classification models (35%), and the Isolation Forest anomaly engine (15%) into a single risk profile.
                   </span>
                 </div>
               ) : (
-                <div className="mt-5 p-3 bg-emerald-50/40 border border-emerald-100 rounded-2xl text-[11px] text-emerald-700 flex items-start gap-2.5">
-                  <CheckCircle size={14} className="mt-0.5 text-emerald-500 flex-shrink-0" />
+                <div className="mt-5 p-3.5 bg-blue-50/60 border border-blue-100 rounded-2xl text-[11px] text-blue-700 flex items-start gap-2.5">
+                  <Info size={14} className="mt-0.5 text-blue-500 flex-shrink-0" />
                   <span>
-                    <strong>Production Mode Active:</strong> Displaying the primary status predicted by <strong>Isolation Forest</strong>. This model runs automatically in the background every 24 hours to update the database.
+                    <strong>Individual Diagnostic Mode:</strong> Displaying predictions specifically for the <strong>{selectedModel.replace(/_/g, " ").toUpperCase()}</strong> model. This mode is useful for granular model analysis.
                   </span>
                 </div>
               )}

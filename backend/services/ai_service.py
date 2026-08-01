@@ -462,6 +462,11 @@ class RealAIModel:
                         "anomaly_score": round(100.0 - health_rf, 2),
                         "risk_category": rf_category,
                         "expected_lifetime_days": expected_lifetime_days
+                    },
+                    "cox": {
+                        "anomaly_score": round(100.0 - health_cox, 2),
+                        "risk_category": "HEALTHY" if health_cox >= 75.0 else ("WARNING" if health_cox >= 45.0 else "CRITICAL"),
+                        "expected_lifetime_days": expected_lifetime_days
                     }
                 }
             }
@@ -703,6 +708,11 @@ class RealAIModel:
                         "anomaly_score": round(100.0 - health_rf, 2),
                         "risk_category": rf_category,
                         "expected_lifetime_days": expected_lifetime_days
+                    },
+                    "cox": {
+                        "anomaly_score": round(100.0 - health_cox, 2),
+                        "risk_category": "HEALTHY" if health_cox >= 75.0 else ("WARNING" if health_cox >= 45.0 else "CRITICAL"),
+                        "expected_lifetime_days": expected_lifetime_days
                     }
                 }
             }
@@ -853,6 +863,11 @@ class RealAIModel:
                     "expected_lifetime_days": expected_lifetime_days
                 },
                 "random_forest": {
+                    "anomaly_score": 0.0,
+                    "risk_category": "UNKNOWN",
+                    "expected_lifetime_days": expected_lifetime_days
+                },
+                "cox": {
                     "anomaly_score": 0.0,
                     "risk_category": "UNKNOWN",
                     "expected_lifetime_days": expected_lifetime_days
