@@ -587,64 +587,7 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
               )}
             </div>
 
-            {/* Risk Gauge Card */}
-            <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-7">
-              <SectionTitle 
-                icon={FlaskConical} 
-                title={selectedModel === "ensemble" ? "Risk Score Breakdown" : `${selectedModel === "isolation_forest" ? "Isolation Forest" : selectedModel === "xgboost" ? "XGBoost" : "Random Forest"} Score`} 
-                subtitle={selectedModel === "ensemble" ? "Composite AI-computed risk index" : "Individual model diagnostic score"} 
-              />
-              <div className="flex items-center gap-8">
-                {/* Circular gauge */}
-                <div className="relative w-32 h-32 flex-shrink-0">
-                  <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90">
-                    <circle cx="60" cy="60" r="50" fill="none" stroke="#F1F5F9" strokeWidth="12" />
-                    {/* Total score arc */}
-                    <circle cx="60" cy="60" r="50" fill="none" stroke={scoreColor} strokeWidth="12"
-                      strokeDasharray={`${2 * Math.PI * 50 * (currentRisk.anomaly_score) / 100} ${2 * Math.PI * 50}`}
-                      strokeLinecap="round" className="transition-all duration-1000 ease-out" />
-                      
-                    {/* Base score arc */}
-                    {weather && weather.weather_penalty_percentage > 0 && (
-                      <circle cx="60" cy="60" r="50" fill="none" stroke="#60A5FA" strokeWidth="12"
-                        strokeDasharray={`${2 * Math.PI * 50 * Math.max(0, (currentRisk.anomaly_score) - weather.weather_penalty_percentage) / 100} ${2 * Math.PI * 50}`}
-                        strokeLinecap="round" className="transition-all duration-1000 ease-out" />
-                    )}
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center rotate-0">
-                    <span className="text-2xl font-black" style={{ color: scoreColor }}>{(currentRisk.anomaly_score).toFixed(0)}</span>
-                    <span className="text-[10px] font-bold text-slate-400">/ 100</span>
-                  </div>
-                </div>
-                {/* Tier explanations */}
-                <div className="flex-1 space-y-2.5">
-                  {[
-                    { tier: "CRITICAL", range: "90–100", color: "bg-red-500",    active: (currentRisk.anomaly_score) >= 90 },
-                    { tier: "WARNING",  range: "70–89",  color: "bg-amber-400",  active: (currentRisk.anomaly_score) >= 70 && (currentRisk.anomaly_score) < 90 },
-                    { tier: "HEALTHY",  range: "0–69",   color: "bg-emerald-500",active: (currentRisk.anomaly_score) < 70 },
-                  ].map(r => (
-                    <div key={r.tier} className={`flex items-center gap-3 py-2 px-3 rounded-xl transition-all ${r.active ? "bg-slate-50 ring-1 ring-slate-200" : "opacity-40"}`}>
-                      <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${r.color}`} />
-                      <span className="text-xs font-extrabold text-slate-700">{r.tier}</span>
-                      <span className="text-xs text-slate-400 ml-auto">{r.range}</span>
-                      {r.active && <CheckCircle size={13} className="text-emerald-600" />}
-                    </div>
-                  ))}
-                </div>
-              </div>
 
-              {/* Weather Penalty Warning */}
-              {weather && weather.weather_penalty_percentage > 0 && (
-                <div className="mt-5 pt-4 border-t border-slate-100">
-                  <div className="flex items-start gap-2 bg-orange-50 border border-orange-100 p-3 rounded-xl text-xs text-orange-800">
-                    <span className="text-sm">⚠️</span>
-                    <div>
-                      <strong>Ambient Heat Stress Penalty Applied:</strong> The outdoor temperature is {weather.ambient_temperature_c.toFixed(1)}°C, which exceeds normal operating conditions. This adds a +{weather.weather_penalty_percentage.toFixed(1)}% thermal stress penalty to the base AI score.
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
 
 
