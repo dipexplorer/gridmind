@@ -529,13 +529,9 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
             {/* SHAP AI Explanation Chart */}
             <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-7">
               <SectionTitle icon={BrainCircuit} title="AI Explainability (SHAP)" subtitle="Why did the AI assign this risk score?" />
-
-              {/* Explanation note */}
-              <div className="flex items-start gap-3 bg-blue-50 border border-blue-100 rounded-2xl p-4 mb-5 text-xs text-blue-700">
-                <Info size={15} className="flex-shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold">How to read:</span> <span className="font-medium">Positive (red) bars</span> mean the feature is <em>pushing the risk score higher</em>. <span className="font-medium">Negative (green) bars</span> mean it's keeping the transformer healthier. Longer bar = stronger influence.
-                </div>
+              {/* Simplified Actionable Explanations */}
+              <div className="text-sm text-slate-500 mb-6">
+                Based on the active AI model&apos;s analysis, here are the key factors driving the current risk score and recommended actions.
               </div>
 
               {formattedShap.length === 0 ? (
@@ -545,44 +541,69 @@ export default function TransformerDetailPage({ params }: { params: Promise<{ id
                   <p className="text-xs mt-1">Run an AI scan to generate explanations</p>
                 </div>
               ) : (
-                <>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={formattedShap} layout="vertical" margin={{ top: 0, right: 25, left: 10, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#F8FAFC" horizontal={false} />
-                      <XAxis type="number" stroke="#CBD5E1" fontSize={10} tickLine={false} axisLine={false}
-                        tickFormatter={v => `${v > 0 ? "+" : ""}${v.toFixed(2)}`} />
-                      <YAxis type="category" dataKey="feature" stroke="#94A3B8" fontSize={11} width={140} tickLine={false} axisLine={false} interval={0} />
-                      <Tooltip
-                        content={({ active, payload }) => {
-                          if (!active || !payload?.length) return null;
-                          const d = payload[0].payload;
-                          return (
-                            <div className="bg-white border border-slate-200 rounded-2xl p-3 shadow-xl text-xs">
-                              <p className="font-extrabold text-slate-800 mb-1">{d.feature}</p>
-                              <p className="text-slate-500">Sensor value: <span className="font-bold text-slate-800">{d.value?.toFixed?.(2) ?? d.value}</span></p>
-                              <p className={`font-bold mt-1 ${d.impact > 0 ? "text-red-600" : "text-emerald-600"}`}>
-                                Risk contribution: {d.impact > 0 ? "+" : ""}{d.impact.toFixed(4)}
-                              </p>
+                <div className="space-y-4">
+                  {formattedShap.filter(s => s.impact > 0).length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-red-600 mb-3 flex items-center gap-2">
+                        <AlertTriangle size={14} /> Factors Increasing Risk
+                      </h4>
+                      <div className="space-y-3">
+                        {formattedShap.filter(s => s.impact > 0).slice(0, 3).map((factor, i) => (
+                          <div key={i} className="bg-red-50 border border-red-100 rounded-xl p-4 flex gap-4 items-start">
+                            <div className="bg-white text-red-500 rounded-full p-2 shadow-sm shrink-0">
+                              <Activity size={18} />
                             </div>
-                          );
-                        }}
-                      />
-                      <ReferenceLine x={0} stroke="#CBD5E1" strokeWidth={1.5} />
-                      <Bar dataKey="impact" radius={[0, 6, 6, 0]} maxBarSize={28}>
-                        {formattedShap.map((entry, i) => (
-                          <Cell key={i} fill={entry.impact > 0 ? "#EF4444" : "#10B981"} fillOpacity={0.85} />
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-bold text-slate-800">{factor.feature}</span>
+                                <span className="bg-white border border-slate-200 text-slate-600 text-[10px] px-2 py-0.5 rounded-full font-semibold">
+                                  Value: {factor.value?.toFixed?.(1) ?? factor.value}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-600 mb-2">
+                                This metric is heavily contributing to the critical/warning score.
+                              </p>
+                              <div className="text-xs font-semibold text-red-700 bg-red-100/50 inline-block px-2 py-1 rounded">
+                                💡 Action: {
+                                  factor.feature.toLowerCase().includes('temp') ? "Inspect cooling system, check for oil leaks, and ensure fans are operational." :
+                                  factor.feature.toLowerCase().includes('load') ? "Consider load shedding, balancing phases, or shifting load to adjacent substations." :
+                                  factor.feature.toLowerCase().includes('voltage') ? "Check tap changer position and capacitor banks for voltage regulation." :
+                                  factor.feature.toLowerCase().includes('current') ? "Investigate for potential short circuits, overloading, or phase imbalance." :
+                                  "Schedule a routine visual inspection and maintenance check."
+                                }
+                              </div>
+                            </div>
+                          </div>
                         ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
 
-                  {/* SHAP Legend */}
-                  <div className="flex items-center gap-5 mt-4 pt-4 border-t border-slate-50 text-xs font-semibold">
-                    <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-red-500 flex-shrink-0" /> Increases risk</div>
-                    <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-emerald-500 flex-shrink-0" /> Reduces risk</div>
-                    <div className="ml-auto text-slate-400 text-[10px] italic">SHAP values from {selectedModel === "xgboost" ? "XGBoost" : selectedModel === "random_forest" ? "Random Forest" : "Isolation Forest"} model</div>
+                  {formattedShap.filter(s => s.impact < 0).length > 0 && (
+                    <div className="mt-6">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-600 mb-3 flex items-center gap-2">
+                        <CheckCircle size={14} /> Stabilizing Factors
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {formattedShap.filter(s => s.impact < 0).slice(0, 2).map((factor, i) => (
+                          <div key={i} className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 flex items-center gap-3">
+                            <div className="bg-white text-emerald-500 rounded-full p-1.5 shadow-sm shrink-0">
+                              <CheckCircle size={14} />
+                            </div>
+                            <div>
+                              <div className="font-bold text-slate-800 text-xs">{factor.feature}</div>
+                              <div className="text-[10px] text-slate-500 font-medium">Currently stable at {factor.value?.toFixed?.(1) ?? factor.value}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-4 text-slate-400 text-[10px] italic text-right">
+                    Diagnostics provided by {selectedModel === "xgboost" ? "XGBoost" : selectedModel === "random_forest" ? "Random Forest" : "Isolation Forest"} model
                   </div>
-                </>
+                </div>
               )}
             </div>
 
