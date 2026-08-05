@@ -13,7 +13,7 @@
 
 ## What is GridMind?
 
-APDCL manages hundreds of distribution transformers across Assam. Traditional maintenance is reactive — transformers are serviced only after they fail, causing unplanned outages and emergency costs.
+APDCL manages approx 1.2 lakhs of distribution transformers across Assam. Traditional maintenance is reactive — transformers are serviced only after they fail, causing unplanned outages and emergency costs.
 
 **GridMind** solves this with a 4-model AI fusion engine:
 
@@ -21,7 +21,7 @@ APDCL manages hundreds of distribution transformers across Assam. Traditional ma
 2. **Risk Classification** — XGBoost + Random Forest directly classify each transformer as SAFE / WARNING / CRITICAL
 3. **Remaining Useful Life** — Cox Proportional Hazards Survival Analysis estimates how many days until probable failure
 4. **Decision Fusion** — A weighted ensemble (Cox 50% + Classifiers 35% + IF 15%) produces a single Health Score (0–100)
-5. **Explainability** — SHAP values reveal exactly *which sensor readings* are driving the risk prediction
+5. **Explainability** — SHAP values reveal exactly _which sensor readings_ are driving the risk prediction
 6. **Dashboard** — Real-time monitoring across all transformers with GIS map, 24-hour telemetry, and maintenance alerts
 
 ---
@@ -69,6 +69,7 @@ npm run dev                                  # http://localhost:3000
 ```
 
 **Default login:**
+
 ```
 Email:    admin@gridmind.com
 Password: GridMind@2026
@@ -99,6 +100,7 @@ FastAPI 0.110  (port 8000)
 ```
 
 **Health Score Fusion Formula:**
+
 ```
 Health Score = 0.50 × Cox_health        (survival probability × 100)
              + 0.35 × min(XGB, RF)      (conservative — worst of the two)
@@ -184,31 +186,31 @@ gridmind/
 
 ## 🧠 ML Models — What Each One Does
 
-| Model | Type | Input | Output | Role in Dashboard |
-|---|---|---|---|---|
-| **Isolation Forest** | Unsupervised anomaly detection | 13 SCADA features | Anomaly Score 0–100% | 15% weight in Health Score |
-| **XGBoost** | Supervised classifier | 13 SCADA features | SAFE / WARNING / CRITICAL + probabilities | 35% weight (with RF) |
-| **Random Forest** | Supervised classifier | 13 SCADA features | SAFE / WARNING / CRITICAL + probabilities | 35% weight (with XGB) |
-| **Cox PH Survival** | Survival analysis | 13 SCADA features | Days to failure + survival probability | 50% weight in Health Score |
-| **LSTM (PyTorch)** | Time-series forecasting | 24h telemetry sequences | Next 24h load & temperature forecast | Academic demo (ML Analytics page) |
+| Model                | Type                           | Input                   | Output                                    | Role in Dashboard                 |
+| -------------------- | ------------------------------ | ----------------------- | ----------------------------------------- | --------------------------------- |
+| **Isolation Forest** | Unsupervised anomaly detection | 13 SCADA features       | Anomaly Score 0–100%                      | 15% weight in Health Score        |
+| **XGBoost**          | Supervised classifier          | 13 SCADA features       | SAFE / WARNING / CRITICAL + probabilities | 35% weight (with RF)              |
+| **Random Forest**    | Supervised classifier          | 13 SCADA features       | SAFE / WARNING / CRITICAL + probabilities | 35% weight (with XGB)             |
+| **Cox PH Survival**  | Survival analysis              | 13 SCADA features       | Days to failure + survival probability    | 50% weight in Health Score        |
+| **LSTM (PyTorch)**   | Time-series forecasting        | 24h telemetry sequences | Next 24h load & temperature forecast      | Academic demo (ML Analytics page) |
 
 **The 13 Input Features:**
 
-| Feature | Source | Description |
-|---|---|---|
-| `temperature_c` | Sensor | Oil temperature (°C) |
-| `load_percentage` | Sensor | Load as % of rated capacity |
-| `voltage_lv` | Sensor | LV side voltage (V) |
-| `current_a` | Sensor | Primary current (A) |
-| `ambient_temperature` | Open-Meteo API | Live outdoor temperature |
-| `age_years` | Database | Transformer age in years |
-| `rated_kva` | Database | Rated capacity (kVA) |
-| `power_factor` | Computed | Load-derived power factor |
-| `load_ratio` | Computed | `load_pct / 100` |
-| `current_ratio` | Computed | `current / rated_current` |
-| `voltage_deviation` | Computed | `(415 − V_lv) / 415` |
-| `temperature_rise` | Computed | `temp_c − ambient_temp` |
-| `stress_index` | Computed | `current_ratio × temp_rise × (1 + 0.05 × age)` |
+| Feature               | Source         | Description                                    |
+| --------------------- | -------------- | ---------------------------------------------- |
+| `temperature_c`       | Sensor         | Oil temperature (°C)                           |
+| `load_percentage`     | Sensor         | Load as % of rated capacity                    |
+| `voltage_lv`          | Sensor         | LV side voltage (V)                            |
+| `current_a`           | Sensor         | Primary current (A)                            |
+| `ambient_temperature` | Open-Meteo API | Live outdoor temperature                       |
+| `age_years`           | Database       | Transformer age in years                       |
+| `rated_kva`           | Database       | Rated capacity (kVA)                           |
+| `power_factor`        | Computed       | Load-derived power factor                      |
+| `load_ratio`          | Computed       | `load_pct / 100`                               |
+| `current_ratio`       | Computed       | `current / rated_current`                      |
+| `voltage_deviation`   | Computed       | `(415 − V_lv) / 415`                           |
+| `temperature_rise`    | Computed       | `temp_c − ambient_temp`                        |
+| `stress_index`        | Computed       | `current_ratio × temp_rise × (1 + 0.05 × age)` |
 
 ---
 
@@ -216,19 +218,19 @@ gridmind/
 
 **Supervised Classifiers** (10,000 samples, 80/20 split, 3-class: SAFE/WARNING/CRITICAL):
 
-| Model | Accuracy | F1-Score | ROC-AUC |
-|---|---|---|---|
-| **Random Forest** (200 trees) | 99.65% | 0.9965 | 0.9999 |
-| **XGBoost** (200 rounds) | 99.50% | 0.9950 | 1.0000 |
+| Model                         | Accuracy | F1-Score | ROC-AUC |
+| ----------------------------- | -------- | -------- | ------- |
+| **Random Forest** (200 trees) | 99.65%   | 0.9965   | 0.9999  |
+| **XGBoost** (200 rounds)      | 99.50%   | 0.9950   | 1.0000  |
 
 **Isolation Forest** (SAFE-only training, evaluated on unseen data):
 
-| Metric | Value | Notes |
-|---|---|---|
-| Accuracy | 87.7% | On 2,971 unseen samples |
-| Anomaly Recall | **100%** | All WARNING + CRITICAL flagged |
-| SAFE False-Positive | ~20.7% | Improvement target |
-| Training contamination | `auto` | No label leakage |
+| Metric                 | Value    | Notes                          |
+| ---------------------- | -------- | ------------------------------ |
+| Accuracy               | 87.7%    | On 2,971 unseen samples        |
+| Anomaly Recall         | **100%** | All WARNING + CRITICAL flagged |
+| SAFE False-Positive    | ~20.7%   | Improvement target             |
+| Training contamination | `auto`   | No label leakage               |
 
 > High supervised accuracy is expected on synthetic physics-based data. Real-world accuracy would require actual failure-labeled APDCL data.
 
@@ -236,29 +238,29 @@ gridmind/
 
 ## 🖥️ Frontend Pages
 
-| Page | URL | Description |
-|---|---|---|
-| **Login** | `/login` | JWT authentication |
-| **Dashboard** | `/dashboard` | Fleet overview: health cards, anomaly counts, high-risk list |
-| **Transformer Detail** | `/dashboard/[id]` | 24h telemetry, Health Score, SHAP risk drivers, RUL, model breakdown |
-| **GIS Map** | `/map` | Transformer locations colour-coded by health status |
-| **ML Analytics** | `/ml-analytics` | Confusion matrices, classification reports, ROC curves, LSTM forecast |
+| Page                   | URL               | Description                                                           |
+| ---------------------- | ----------------- | --------------------------------------------------------------------- |
+| **Login**              | `/login`          | JWT authentication                                                    |
+| **Dashboard**          | `/dashboard`      | Fleet overview: health cards, anomaly counts, high-risk list          |
+| **Transformer Detail** | `/dashboard/[id]` | 24h telemetry, Health Score, SHAP risk drivers, RUL, model breakdown  |
+| **GIS Map**            | `/map`            | Transformer locations colour-coded by health status                   |
+| **ML Analytics**       | `/ml-analytics`   | Confusion matrices, classification reports, ROC curves, LSTM forecast |
 
 ---
 
 ## 🔌 Key API Endpoints
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/api/v1/auth/login` | JWT login |
-| `GET` | `/api/v1/transformers` | List all transformers with current health |
-| `GET` | `/api/v1/transformers/{id}` | Full detail: telemetry, SHAP, health history |
-| `GET` | `/api/v1/transformers/{id}/predict` | Run live ML inference |
-| `GET` | `/api/v1/intelligence` | Batch health scores for all transformers |
-| `GET` | `/api/v1/ml/benchmark` | Benchmark results JSON (confusion matrix, class report, ROC) |
-| `POST` | `/api/v1/ml/run-benchmark` | Trigger benchmark re-training (background) |
-| `GET` | `/api/v1/ml/deep-learning` | LSTM training results |
-| `WS` | `/api/v1/ws/telemetry` | Real-time telemetry WebSocket |
+| Method | Endpoint                            | Description                                                  |
+| ------ | ----------------------------------- | ------------------------------------------------------------ |
+| `POST` | `/api/v1/auth/login`                | JWT login                                                    |
+| `GET`  | `/api/v1/transformers`              | List all transformers with current health                    |
+| `GET`  | `/api/v1/transformers/{id}`         | Full detail: telemetry, SHAP, health history                 |
+| `GET`  | `/api/v1/transformers/{id}/predict` | Run live ML inference                                        |
+| `GET`  | `/api/v1/intelligence`              | Batch health scores for all transformers                     |
+| `GET`  | `/api/v1/ml/benchmark`              | Benchmark results JSON (confusion matrix, class report, ROC) |
+| `POST` | `/api/v1/ml/run-benchmark`          | Trigger benchmark re-training (background)                   |
+| `GET`  | `/api/v1/ml/deep-learning`          | LSTM training results                                        |
+| `WS`   | `/api/v1/ws/telemetry`              | Real-time telemetry WebSocket                                |
 
 Full Swagger UI: `http://localhost:8000/api/docs`
 
@@ -266,24 +268,24 @@ Full Swagger UI: `http://localhost:8000/api/docs`
 
 ## 🧑‍💻 Tech Stack
 
-| Layer | Technology | Version |
-|---|---|---|
-| **Backend** | FastAPI | 0.110.0 |
-| **Language** | Python | 3.12 |
-| **ML — Anomaly** | scikit-learn IsolationForest | 1.4.2 |
-| **ML — Classification** | XGBoost, scikit-learn RandomForest | 2.0.3 / 1.4.2 |
-| **ML — Survival** | lifelines CoxPHFitter | 0.27.8 |
-| **ML — Explainability** | SHAP TreeExplainer | 0.45.0 |
-| **ML — Deep Learning** | PyTorch LSTM (stacked 2-layer) | via deep_learning.py |
-| **Database** | PostgreSQL 16 + PostGIS | — |
-| **ORM** | SQLAlchemy | 2.0.29 |
-| **Migrations** | Alembic | 1.13.1 |
-| **Frontend** | Next.js 14 (TypeScript) | 14.x |
-| **Charts** | Recharts | latest |
-| **HTTP Client** | Axios | via apiClient |
-| **Auth** | JWT (python-jose) | 3.3.0 |
-| **Async Tasks** | Celery + Redis | 5.3.6 |
-| **Deployment** | Render.com (render.yaml) | — |
+| Layer                   | Technology                         | Version              |
+| ----------------------- | ---------------------------------- | -------------------- |
+| **Backend**             | FastAPI                            | 0.110.0              |
+| **Language**            | Python                             | 3.12                 |
+| **ML — Anomaly**        | scikit-learn IsolationForest       | 1.4.2                |
+| **ML — Classification** | XGBoost, scikit-learn RandomForest | 2.0.3 / 1.4.2        |
+| **ML — Survival**       | lifelines CoxPHFitter              | 0.27.8               |
+| **ML — Explainability** | SHAP TreeExplainer                 | 0.45.0               |
+| **ML — Deep Learning**  | PyTorch LSTM (stacked 2-layer)     | via deep_learning.py |
+| **Database**            | PostgreSQL 16 + PostGIS            | —                    |
+| **ORM**                 | SQLAlchemy                         | 2.0.29               |
+| **Migrations**          | Alembic                            | 1.13.1               |
+| **Frontend**            | Next.js 14 (TypeScript)            | 14.x                 |
+| **Charts**              | Recharts                           | latest               |
+| **HTTP Client**         | Axios                              | via apiClient        |
+| **Auth**                | JWT (python-jose)                  | 3.3.0                |
+| **Async Tasks**         | Celery + Redis                     | 5.3.6                |
+| **Deployment**          | Render.com (render.yaml)           | —                    |
 
 ---
 
@@ -298,6 +300,7 @@ python backend/scripts/generate_datasets.py
 ```
 
 Each row simulates one 24-hour snapshot of a transformer with:
+
 - Physics-derived sensor readings (temperature, load, voltage, current)
 - Engineered features (stress index, load ratio, temperature rise)
 - Ground-truth risk label (0=SAFE, 1=WARNING, 2=CRITICAL)
@@ -331,6 +334,7 @@ threading.Thread(target=schedule_daily_batch, daemon=True).start()
 ```
 
 This calls `scripts/predict_daily_batch.py` which:
+
 1. Loads all transformers from DB
 2. Fetches their latest 24h telemetry readings
 3. Runs `ai_service.predict_daily_health()` on each
@@ -378,4 +382,4 @@ MIT License — see [LICENSE](LICENSE).
 
 ---
 
-*Built during APDCL Internship | July–August 2026 | Guwahati, Assam, India*
+_Built during APDCL Internship | July–August 2026 | Guwahati, Assam, India_
