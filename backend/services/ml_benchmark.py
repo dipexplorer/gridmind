@@ -29,7 +29,7 @@ from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score,
     f1_score, roc_auc_score, confusion_matrix,
-    roc_curve, auc
+    roc_curve, auc, classification_report
 )
 
 try:
@@ -174,6 +174,7 @@ def run_benchmark(save_path: str = None) -> dict:
 
         # Confusion Matrix
         cm = confusion_matrix(y_test, y_pred).tolist()
+        class_report = classification_report(y_test, y_pred, target_names=class_names, output_dict=True)
 
         logger.info(f"    {model_name}: Accuracy={accuracy:.3f}, F1={f1:.3f}, ROC-AUC={roc_auc:.3f}")
 
@@ -187,6 +188,7 @@ def run_benchmark(save_path: str = None) -> dict:
             "cv_mean_f1":  round(float(cv_scores.mean()), 4),
             "cv_std_f1":   round(float(cv_scores.std()), 4),
             "confusion_matrix": cm,
+            "class_report": class_report,
         }
 
         # ─── ROC Curve Data (per class for charting)
