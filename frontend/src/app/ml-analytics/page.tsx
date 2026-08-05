@@ -305,80 +305,88 @@ export default function MLAnalyticsPage() {
                 </div>
               </div>
 
-              {/* Confusion Matrix and Classification Report */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
-                {/* Confusion Matrix */}
-                <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-sm flex flex-col">
-                  <h3 className="text-lg font-bold text-slate-900 mb-2">Confusion Matrix ({benchmark.summary.best_model})</h3>
-                  <p className="text-slate-500 text-xs mb-6">Actual vs Predicted classes for the best performing model.</p>
-                  
-                  <div className="flex-1 flex items-center justify-center min-h-[300px]">
-                    <div className="grid grid-cols-4 gap-2 text-center text-sm w-full max-w-md">
-                      {/* Header */}
-                      <div className="font-semibold text-slate-500 flex items-end justify-end pr-2 pb-2 text-xs">Actual \ Pred</div>
-                      <div className="font-semibold text-emerald-600 pb-2">SAFE</div>
-                      <div className="font-semibold text-amber-500 pb-2">WARNING</div>
-                      <div className="font-semibold text-red-500 pb-2">CRITICAL</div>
-                      
-                      {/* SAFE Row */}
-                      <div className="font-semibold text-emerald-600 flex items-center justify-end pr-2">SAFE</div>
-                      {benchmark.models[benchmark.summary.best_model].confusion_matrix[0].map((val, idx) => (
-                        <div key={`0-${idx}`} className={`p-3 rounded-lg flex items-center justify-center font-bold ${idx === 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-50 text-slate-400'}`}>{val}</div>
-                      ))}
-                      
-                      {/* WARNING Row */}
-                      <div className="font-semibold text-amber-500 flex items-center justify-end pr-2">WARNING</div>
-                      {benchmark.models[benchmark.summary.best_model].confusion_matrix[1].map((val, idx) => (
-                        <div key={`1-${idx}`} className={`p-3 rounded-lg flex items-center justify-center font-bold ${idx === 1 ? 'bg-amber-100 text-amber-700' : 'bg-slate-50 text-slate-400'}`}>{val}</div>
-                      ))}
-                      
-                      {/* CRITICAL Row */}
-                      <div className="font-semibold text-red-500 flex items-center justify-end pr-2">CRITICAL</div>
-                      {benchmark.models[benchmark.summary.best_model].confusion_matrix[2].map((val, idx) => (
-                        <div key={`2-${idx}`} className={`p-3 rounded-lg flex items-center justify-center font-bold ${idx === 2 ? 'bg-red-100 text-red-700' : 'bg-slate-50 text-slate-400'}`}>{val}</div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+              {/* Confusion Matrix and Classification Report — all models */}
+              <div className="space-y-6 mt-8">
+                {Object.entries(benchmark.models).map(([modelName, metrics]) => {
+                  const isBest = modelName === benchmark.summary.best_model;
+                  return (
+                    <div key={modelName} className="p-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
+                      {/* Model Header */}
+                      <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
+                        <h3 className="text-base font-bold text-slate-900">{modelName}</h3>
+                        {isBest && (
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-600 border border-indigo-200">
+                            Best Model
+                          </span>
+                        )}
+                        <span className="text-xs text-slate-400 ml-auto">
+                          Acc {(metrics.accuracy * 100).toFixed(1)}% &nbsp;|&nbsp; AUC {metrics.roc_auc.toFixed(4)}
+                        </span>
+                      </div>
 
-                {/* Classification Report */}
-                <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-sm flex flex-col">
-                  <h3 className="text-lg font-bold text-slate-900 mb-2">Classification Report ({benchmark.summary.best_model})</h3>
-                  <p className="text-slate-500 text-xs mb-6">Precision, Recall, and F1-Score across all classes.</p>
-                  
-                  <div className="flex-1 min-h-[300px]">
-                     {benchmark.models[benchmark.summary.best_model].class_report ? (
-                       <table className="w-full text-left text-sm">
-                         <thead>
-                           <tr className="border-b border-slate-200 text-slate-500 font-semibold">
-                             <th className="py-3">Class</th>
-                             <th className="py-3 text-right">Precision</th>
-                             <th className="py-3 text-right">Recall</th>
-                             <th className="py-3 text-right">F1-Score</th>
-                             <th className="py-3 text-right">Support</th>
-                           </tr>
-                         </thead>
-                         <tbody className="divide-y divide-slate-100">
-                           {['SAFE', 'WARNING', 'CRITICAL', 'macro avg', 'weighted avg'].map(cls => (
-                             benchmark.models[benchmark.summary.best_model].class_report[cls] && (
-                               <tr key={cls} className={cls.includes('avg') ? 'bg-slate-50 font-semibold' : ''}>
-                                 <td className="py-4 text-slate-900">{cls}</td>
-                                 <td className="py-4 text-right text-slate-600">{benchmark.models[benchmark.summary.best_model].class_report[cls].precision.toFixed(2)}</td>
-                                 <td className="py-4 text-right text-slate-600">{benchmark.models[benchmark.summary.best_model].class_report[cls].recall.toFixed(2)}</td>
-                                 <td className="py-4 text-right text-slate-600">{benchmark.models[benchmark.summary.best_model].class_report[cls]['f1-score'].toFixed(2)}</td>
-                                 <td className="py-4 text-right text-slate-500">{benchmark.models[benchmark.summary.best_model].class_report[cls].support}</td>
-                               </tr>
-                             )
-                           ))}
-                         </tbody>
-                       </table>
-                     ) : (
-                       <div className="flex items-center justify-center h-full text-slate-400">
-                         Class report data not available. Please retrain models.
-                       </div>
-                     )}
-                  </div>
-                </div>
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        {/* Confusion Matrix */}
+                        <div>
+                          <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4">Confusion Matrix</p>
+                          <div className="grid grid-cols-4 gap-1.5 text-center text-xs w-full">
+                            <div className="text-slate-400 text-xs flex items-end justify-end pr-1 pb-1">Act\Pred</div>
+                            <div className="font-semibold text-emerald-600 pb-1">SAFE</div>
+                            <div className="font-semibold text-amber-500 pb-1">WARN</div>
+                            <div className="font-semibold text-red-500 pb-1">CRIT</div>
+
+                            <div className="font-semibold text-emerald-600 flex items-center justify-end pr-1">SAFE</div>
+                            {metrics.confusion_matrix[0].map((val, idx) => (
+                              <div key={`${modelName}-0-${idx}`} className={`py-2.5 rounded-lg flex items-center justify-center font-bold text-sm ${idx === 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-50 text-slate-400'}`}>{val}</div>
+                            ))}
+
+                            <div className="font-semibold text-amber-500 flex items-center justify-end pr-1">WARN</div>
+                            {metrics.confusion_matrix[1].map((val, idx) => (
+                              <div key={`${modelName}-1-${idx}`} className={`py-2.5 rounded-lg flex items-center justify-center font-bold text-sm ${idx === 1 ? 'bg-amber-100 text-amber-700' : 'bg-slate-50 text-slate-400'}`}>{val}</div>
+                            ))}
+
+                            <div className="font-semibold text-red-500 flex items-center justify-end pr-1">CRIT</div>
+                            {metrics.confusion_matrix[2].map((val, idx) => (
+                              <div key={`${modelName}-2-${idx}`} className={`py-2.5 rounded-lg flex items-center justify-center font-bold text-sm ${idx === 2 ? 'bg-red-100 text-red-700' : 'bg-slate-50 text-slate-400'}`}>{val}</div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Classification Report */}
+                        <div>
+                          <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4">Classification Report</p>
+                          {metrics.class_report ? (
+                            <table className="w-full text-left text-xs">
+                              <thead>
+                                <tr className="border-b border-slate-100 text-slate-400 font-semibold">
+                                  <th className="pb-2">Class</th>
+                                  <th className="pb-2 text-right">Precision</th>
+                                  <th className="pb-2 text-right">Recall</th>
+                                  <th className="pb-2 text-right">F1</th>
+                                  <th className="pb-2 text-right">Support</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-50">
+                                {['SAFE', 'WARNING', 'CRITICAL', 'macro avg', 'weighted avg'].map(cls =>
+                                  metrics.class_report[cls] && (
+                                    <tr key={cls} className={cls.includes('avg') ? 'bg-slate-50 font-semibold' : ''}>
+                                      <td className="py-2.5 text-slate-800">{cls}</td>
+                                      <td className="py-2.5 text-right text-slate-600">{metrics.class_report[cls].precision.toFixed(2)}</td>
+                                      <td className="py-2.5 text-right text-slate-600">{metrics.class_report[cls].recall.toFixed(2)}</td>
+                                      <td className="py-2.5 text-right text-slate-600">{metrics.class_report[cls]['f1-score'].toFixed(2)}</td>
+                                      <td className="py-2.5 text-right text-slate-400">{metrics.class_report[cls].support}</td>
+                                    </tr>
+                                  )
+                                )}
+                              </tbody>
+                            </table>
+                          ) : (
+                            <div className="text-slate-400 text-sm">Retrain models to see class report.</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
