@@ -4,6 +4,7 @@ from .asset import Substation, Feeder, Transformer
 from .event import MaintenanceLog, FailureEvent
 from .timeseries import Complaint
 from .notification import Notification
+from .ticket import MaintenanceTicket
 
 __all__ = [
     "Base",
@@ -14,6 +15,7 @@ __all__ = [
     "MaintenanceLog",
     "FailureEvent",
     "Complaint",
-    "Notification"
+    "Notification",
+    "MaintenanceTicket"
 ]
 

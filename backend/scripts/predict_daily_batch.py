@@ -26,8 +26,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.config import settings
 from core.database import SessionLocal
 from models.asset import Transformer
+from models.ticket import MaintenanceTicket  # noqa: F401 — needed for Base metadata
 from services.ai_service import ai_service
 from services.data_cache import load_data_caches, get_telemetry_history
+from crud.crud_ticket import create_ticket, open_ticket_exists
+from schemas.ticket import TicketCreate
 
 # Configure logging
 logging.basicConfig(
@@ -115,13 +118,13 @@ def run_batch_prediction():
 
         logger.info("Initializing Daily Batch ML Prediction Run...")
 
-        # Use yield_per() to avoid loading the entire table into memory.
-        # Safe for large fleets (100,000+ transformers).
-        transformer_query = db.query(Transformer).yield_per(settings.BATCH_COMMIT_EVERY)
+        # Load all transformers into memory (completely safe for current fleet size)
+        transformer_query = db.query(Transformer).all()
 
         anomalies_detected = 0
         updated_count = 0
         skipped_count = 0
+        tickets_created = 0
 
         for idx, t in enumerate(transformer_query):
             try:
@@ -180,6 +183,48 @@ def run_batch_prediction():
 
                 if risk_category in ("WARNING", "CRITICAL"):
                     anomalies_detected += 1
+
+                # ── 5. Auto-create maintenance ticket if needed ──────────────
+                # One open ticket per transformer per priority level.
+                # dedup_key prevents duplicates across batch runs.
+                if risk_category == "CRITICAL":
+                    priority = "CRITICAL"
+                    dedup_key = f"AUTO:CRITICAL:{t.id}"
+                    desc = (
+                        f"Transformer {t.transformer_code} is in CRITICAL condition "
+                        f"(Health Score: {int(health_score)}/100, "
+                        f"Failure Risk: {round(float(failure_prob), 1)}%). "
+                        "Immediate inspection and intervention required."
+                    )
+                elif risk_category == "WARNING":
+                    priority = "HIGH"
+                    dedup_key = f"AUTO:HIGH:{t.id}"
+                    desc = (
+                        f"Transformer {t.transformer_code} has entered WARNING status "
+                        f"(Health Score: {int(health_score)}/100). "
+                        "Schedule a maintenance check."
+                    )
+                else:
+                    priority = None
+                    dedup_key = None
+                    desc = None
+
+                if priority and dedup_key and not open_ticket_exists(db, dedup_key):
+                    ticket = create_ticket(db, TicketCreate(
+                        transformer_id=str(t.id),
+                        priority=priority,
+                        description=desc,
+                        trigger_type="AUTO",
+                        health_score=float(health_score),
+                        dedup_key=dedup_key,
+                    ))
+                    if ticket:
+                        tickets_created += 1
+                        logger.info(
+                            f"[{t.transformer_code}] Auto-ticket created "
+                            f"(priority={priority}, score={int(health_score)})"
+                        )
+
                 updated_count += 1
 
                 # ── 5. Periodic commit ───────────────────────────────────────
@@ -206,7 +251,7 @@ def run_batch_prediction():
         logger.info(
             f"Daily batch run complete. "
             f"Updated: {updated_count} | Skipped: {skipped_count} | "
-            f"Anomalies: {anomalies_detected}"
+            f"Anomalies: {anomalies_detected} | Tickets created: {tickets_created}"
         )
 
     except Exception as e:
