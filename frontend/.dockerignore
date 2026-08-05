@@ -1,0 +1,37 @@
+# ─── Frontend .dockerignore ───────────────────────────────────────────────────
+# Files NOT copied into the Docker build context (keeps image small and fast)
+
+# Dependencies (re-installed inside container from package.json)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js build output (re-built inside container)
+.next/
+out/
+
+# Local environment files (secrets — injected via docker-compose args)
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+.nyc_output/
+
+# TypeScript build info
+*.tsbuildinfo
+next-env.d.ts

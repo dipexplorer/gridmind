@@ -1,0 +1,46 @@
+# ─── Backend .dockerignore ────────────────────────────────────────────────────
+# Files NOT copied into the Docker build context (keeps image small)
+
+# Virtual environment (re-installed inside container)
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+
+# Development tools
+.mypy_cache/
+.ruff_cache/
+
+# Local database (not used in Docker — uses PostgreSQL service)
+*.db
+*.sqlite3
+
+# Local environment file (secrets — injected via docker-compose environment)
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore
+
+# Docs and reports
+docs/
+
+# ML model directory note:
+# .pkl and .pt files ARE copied — they are the trained models needed at runtime

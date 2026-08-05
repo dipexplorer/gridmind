@@ -3,6 +3,10 @@ const nextConfig = {
   // Enable React strict mode — catches potential bugs earlier
   reactStrictMode: true,
 
+  // Standalone output — needed for Docker multi-stage build
+  // Copies only the minimal files needed to run in production
+  output: 'standalone',
+
   // Environment variables prefixed with NEXT_PUBLIC_ are exposed to the browser
   // Other env vars (no prefix) are server-side only
   env: {

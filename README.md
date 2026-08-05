@@ -26,9 +26,66 @@ APDCL manages approx 1.2 lakhs of distribution transformers across Assam. Tradit
 
 ---
 
-## ⚡ Quick Start
+## 🐳 Quick Start with Docker (Recommended)
 
-**Prerequisites:** Python 3.12, Node.js 18+, PostgreSQL 16
+**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) 24.0+ and [Docker Compose](https://docs.docker.com/compose/) 2.20+
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/dipexplorer/gridmind.git
+cd gridmind
+
+# 2. Copy and configure environment (edit passwords if needed)
+cp .env.example .env
+
+# 3. Start all services (PostgreSQL + FastAPI backend + Next.js frontend)
+docker compose up -d
+
+# 4. First-time setup — run once to initialize DB, seed data, and train models
+chmod +x docker-setup.sh
+./docker-setup.sh
+```
+
+That's it! Open:
+
+| Service | URL |
+| --- | --- |
+| **Dashboard** | http://localhost:3000 |
+| **API Swagger** | http://localhost:8000/api/docs |
+| **API ReDoc** | http://localhost:8000/api/redoc |
+
+**Default login:**
+
+```
+Email:    admin@gridmind.com
+Password: GridMind@2026
+```
+
+### Docker Commands Reference
+
+```bash
+docker compose up -d          # Start all services in background
+docker compose down           # Stop all services
+docker compose down -v        # Stop + delete database volume (full reset)
+docker compose logs -f        # Watch live logs from all services
+docker compose logs backend   # Watch backend logs only
+docker compose ps             # Check container status
+
+# Re-train models inside the running backend container
+docker compose exec backend python scripts/train_production_models.py
+
+# Run database migrations
+docker compose exec backend alembic upgrade head
+
+# Open a shell inside the backend container
+docker compose exec backend bash
+```
+
+---
+
+## ⚡ Manual Setup (Without Docker)
+
+**Prerequisites:** Python 3.11, Node.js 20+, PostgreSQL 16
 
 ```bash
 # 1. Clone
@@ -62,17 +119,8 @@ uvicorn main:app --reload --port 8000
 cd ../frontend
 npm install
 npm run dev                                  # http://localhost:3000
-
-# API docs available at:
-#   http://localhost:8000/api/docs    (Swagger UI)
-#   http://localhost:8000/api/redoc   (ReDoc)
 ```
 
-**Default login:**
-
-```
-Email:    admin@gridmind.com
-Password: GridMind@2026
 ```
 
 ---
@@ -118,6 +166,8 @@ Status:  ≥ 75  →  HEALTHY 🟢
 ```
 gridmind/
 ├── backend/
+│   ├── Dockerfile                 # Multi-stage Docker build for FastAPI
+│   ├── .dockerignore
 │   ├── api/
 │   │   └── endpoints/
 │   │       ├── asset.py           # GET /transformers — list and filter transformers
@@ -163,6 +213,8 @@ gridmind/
 │       └── ml_training_dataset.csv    # 10,000 labeled SCADA telemetry samples
 │
 ├── frontend/
+│   ├── Dockerfile                 # Multi-stage Docker build for Next.js
+│   ├── .dockerignore
 │   └── src/
 │       ├── app/
 │       │   ├── page.tsx           # Root → redirects to /dashboard
@@ -175,6 +227,8 @@ gridmind/
 │       └── lib/
 │           └── api.ts             # Axios API client (JWT auth, base URL from env)
 │
+├── docker-compose.yml             # Docker Compose — starts db + backend + frontend
+├── docker-setup.sh                # First-time init: migrate DB, seed data, train models
 ├── data-pipeline/                 # Standalone ETL pipeline (separate venv)
 ├── docs/                          # Architecture, engineering, product documentation
 ├── .env.example                   # Environment variable template
