@@ -77,17 +77,17 @@ The objective of this project was to prototype a system that would:
     risk-score      risk-score         via anon key)
             │
 ┌───────────▼─────────────────────────────────────────────┐
-│              FastAPI Backend — Render.com / localhost    │
+│              FastAPI Backend — Render.com / localhost   │
 │                                                         │
-│  ┌──────────────┐  ┌──────────────┐  ┌───────────────┐ │
-│  │  API Routers │  │ InferService │  │  AI Service   │ │
-│  │  (FastAPI)   │→ │  (fusion)    │→ │ (4-model ML)  │ │
-│  └──────────────┘  └──────────────┘  └───────────────┘ │
+│  ┌──────────────┐  ┌──────────────┐  ┌───────────────┐  │
+│  │  API Routers │  │ InferService │  │  AI Service   │  │
+│  │  (FastAPI)   │→ │  (fusion)    │→ │ (4-model ML)  │  │
+│  └──────────────┘  └──────────────┘  └───────────────┘  │
 │                                            │            │
 │  ┌─────────────────────────────────────────▼──────────┐ │
 │  │     ml_models/  (PKL files on disk)                │ │
 │  │   isolation_forest.pkl   survival_model.pkl        │ │
-│  │   benchmark_random_forest.pkl  benchmark_xgboost.pkl│ │
+│  │   benchmark_random_forest.pkl benchmark_xgboost.pkl│ │
 │  │   lstm_forecaster.pt                               │ │
 │  └────────────────────────────────────────────────────┘ │
 │                                                         │
@@ -231,15 +231,15 @@ Telemetry (24h × 4 raw readings)
    IF   XGB  RF       Cox PH
     │    │    │          │
     ▼    ▼    ▼          ▼
-anomaly  class class  survival
-score  label  label   prob @ 365d
-    │    │    │          │
-    └────┼────┘          │
-         ▼               │
-    "winner model"       │
-    (min health of      │
-     XGB vs RF)          │
-         │               │
+anomaly class class    survival
+score   label label   prob @ 365d
+    │    │    │           │
+    └────┼────┘           │
+         ▼                │
+    "winner model"        │
+    (min health of        │
+     XGB vs RF)           │
+         │                │
          └───────┬────────┘
                  │
          Decision Fusion Engine
