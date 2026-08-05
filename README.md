@@ -5,7 +5,7 @@
 > Developed under **Assam Power Distribution Company Limited (APDCL)** — Internship Project, July–August 2026
 
 [![Python](https://img.shields.io/badge/Python-3.11-blue)](https://python.org)
-[![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110-green)](https://fastapi.tiangolo.com)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
