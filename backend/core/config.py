@@ -62,8 +62,11 @@ class Settings(BaseSettings):
 
     # ─── ML Models ────────────────────────────────────────────────────────────
     MODEL_DIR: str = "ml_models"
-    # Actual anomaly rate in physical dataset: (WARNING + CRITICAL) / total
-    # (344 + 869) / 10000 ≈ 0.12 — set here, read by train_production_models.py
+    # DEPRECATED for Isolation Forest training.
+    # IF now uses contamination="auto" (sklearn default heuristic) so that
+    # the known label distribution (12.13% anomalies) is NOT injected directly
+    # into the model threshold — which would make evaluation artificially easy.
+    # Retained here for any legacy callers or future override via .env.
     ANOMALY_CONTAMINATION: float = 0.12
 
     # Fusion weights for Health Score calculation
